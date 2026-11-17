@@ -14,7 +14,7 @@ import java.time.YearMonth
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 
-data class CourseInput(val name: String, val code: String, val type: CourseType, val colorArgb: Long? = null)
+data class CourseInput(val name: String, val type: CourseType, val colorArgb: Long? = null)
 
 /** One course plus its optional mid-semester opening balance during setup or later edits. */
 data class CourseSetup(
@@ -42,7 +42,6 @@ enum class DlStatus { PENDING, APPROVED, REJECTED }
 data class SessionView(
     val id: UUID,
     val courseId: UUID,
-    val courseCode: String,
     val courseName: String,
     val courseType: CourseType,
     val colorArgb: Long?,
@@ -71,6 +70,7 @@ data class SlotCell(
     val session: SessionView?,
     /** Projected course for future dates that are not materialized yet. */
     val projectedCourseId: UUID? = null,
+    val projectedCourseName: String? = null,
 )
 
 /** Consecutive slots sharing one course are grouped (lab cards); free slots stand alone. */
@@ -114,7 +114,7 @@ data class ConflictInfo(
     val sessionId: UUID,
     val date: LocalDate,
     val slot: Int?,
-    val courseCode: String,
+    val courseName: String,
     val expectedCourseId: UUID,
     val reason: String,
 )
@@ -136,7 +136,7 @@ data class DlEventView(
     val rejected: Int,
     val dates: Int,
     val dateLabels: List<LocalDate>,
-    val courseCodes: List<String>,
+    val courseNames: List<String>,
 )
 
 data class DlStats(

@@ -21,7 +21,6 @@ data class StoredOverview(
     val archived: Boolean,
     val courseId: String,
     val courseName: String,
-    val courseCode: String,
     val courseType: String,
     val loggingStartDay: Long,
     val conducted: Long,
@@ -109,14 +108,16 @@ interface SetupDao {
     suspend fun updatePreferences(theme: String, haptics: Boolean, reminderEnabled: Boolean, reminderMinute: Int): Int
     @Query("SELECT * FROM semester WHERE id = :id") fun observeSemester(id: String): Flow<SemesterEntity?>
     @Query("SELECT * FROM course WHERE id = :id") suspend fun course(id: String): CourseEntity?
-    @Query("SELECT * FROM course WHERE semesterId = :semesterId ORDER BY normalizedCode") fun observeCourses(semesterId: String): Flow<List<CourseEntity>>
-    @Query("SELECT * FROM course WHERE semesterId = :semesterId ORDER BY normalizedCode") suspend fun courses(semesterId: String): List<CourseEntity>
-    @Query("SELECT * FROM course WHERE semesterId = :semesterId AND retired = 0 ORDER BY normalizedCode") suspend fun activeCourses(semesterId: String): List<CourseEntity>
-    @Query("UPDATE course SET name = :name, code = :code, normalizedCode = :normalizedCode, type = :type, colorArgb = :colorArgb WHERE id = :id")
-    suspend fun updateCourse(id: String, name: String, code: String, normalizedCode: String, type: String, colorArgb: Long?): Int
+    @Query("SELECT * FROM course WHERE semesterId = :semesterId ORDER BY name COLLATE NOCASE, id") fun observeCourses(semesterId: String): Flow<List<CourseEntity>>
+    @Query("SELECT * FROM course WHERE semesterId = :semesterId ORDER BY name COLLATE NOCASE, id") suspend fun courses(semesterId: String): List<CourseEntity>
+    @Query("SELECT * FROM course WHERE semesterId = :semesterId AND retired = 0 ORDER BY name COLLATE NOCASE, id") suspend fun activeCourses(semesterId: String): List<CourseEntity>
+    @Query("UPDATE course SET name = :name, type = :type, colorArgb = :colorArgb WHERE id = :id")
+    suspend fun updateCourse(id: String, name: String, type: String, colorArgb: Long?): Int
     @Query("UPDATE course SET retired = 1 WHERE id = :id") suspend fun retireCourse(id: String): Int
     @Query("SELECT * FROM opening_balance WHERE courseId = :courseId") suspend fun balance(courseId: String): OpeningBalanceEntity?
     @Query("SELECT * FROM opening_balance") suspend fun balances(): List<OpeningBalanceEntity>
+    @Query("SELECT b.* FROM opening_balance b JOIN course c ON c.id = b.courseId WHERE c.semesterId = :semesterId")
+    fun observeBalances(semesterId: String): Flow<List<OpeningBalanceEntity>>
     @Query("UPDATE opening_balance SET loggingStartDay = :loggingStartDay, conducted = :conducted, present = :present, approvedDl = :approvedDl, pendingDl = :pendingDl, revision = revision + 1 WHERE courseId = :courseId")
     suspend fun updateBalance(courseId: String, loggingStartDay: Long, conducted: Long, present: Long, approvedDl: Long, pendingDl: Long): Int
     @Query("UPDATE opening_balance SET loggingStartDay = :loggingStartDay, conducted = :conducted, present = :present, approvedDl = :approvedDl, pendingDl = :pendingDl, revision = :revision WHERE courseId = :courseId")
@@ -124,7 +125,7 @@ interface SetupDao {
     @Transaction
     @Query("""
         SELECT s.id AS semesterId, s.name AS semesterName, s.startDay, s.collegeZone, s.archived,
-               c.id AS courseId, c.name AS courseName, c.code AS courseCode, c.type AS courseType,
+               c.id AS courseId, c.name AS courseName, c.type AS courseType,
                b.loggingStartDay, b.conducted, b.present, b.approvedDl, b.pendingDl,
                b.revision AS balanceRevision
         FROM app_settings a
@@ -132,13 +133,15 @@ interface SetupDao {
         JOIN course c ON c.semesterId = s.id
         JOIN opening_balance b ON b.courseId = c.id
         WHERE a.id = 1 AND c.retired = 0
-        ORDER BY c.normalizedCode
+        ORDER BY c.name COLLATE NOCASE, c.id
     """)
     fun observeOverview(): Flow<List<StoredOverview>>
 }
 
 @Dao
 interface ScheduleDao {
+    @Query("DELETE FROM template_slot WHERE versionId = :versionId AND weekday = :weekday AND slot = :slot")
+    suspend fun deleteSlot(versionId: String, weekday: Int, slot: Int): Int
     @Insert suspend fun insertVersion(value: ScheduleVersionEntity)
     @Insert suspend fun insertSlots(values: List<TemplateSlotEntity>)
     @Query("DELETE FROM template_slot WHERE versionId = :versionId") suspend fun deleteSlots(versionId: String): Int
@@ -150,12 +153,12 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedule_version WHERE semesterId = :semesterId ORDER BY effectiveDay")
     fun observeVersions(semesterId: String): Flow<List<ScheduleVersionEntity>>
     @Query("SELECT * FROM template_slot WHERE versionId = :versionId") suspend fun slots(versionId: String): List<TemplateSlotEntity>
-    @Query("SELECT s.effectiveDay AS effectiveDay, t.weekday AS weekday, t.slot AS slot, t.courseId AS courseId FROM schedule_version s JOIN template_slot t ON t.versionId = s.id WHERE s.semesterId = :semesterId ORDER BY s.effectiveDay")
+    @Query("SELECT s.id AS versionId, s.effectiveDay AS effectiveDay, t.weekday AS weekday, t.slot AS slot, t.courseId AS courseId FROM schedule_version s LEFT JOIN template_slot t ON t.versionId = s.id WHERE s.semesterId = :semesterId ORDER BY s.effectiveDay")
     fun observeTemplates(semesterId: String): Flow<List<TemplateRow>>
     @Query("SELECT * FROM schedule_version WHERE id = :id") suspend fun version(id: String): ScheduleVersionEntity?
 }
 
-data class TemplateRow(val effectiveDay: Long, val weekday: Int, val slot: Int, val courseId: String)
+data class TemplateRow(val effectiveDay: Long, val weekday: Int?, val slot: Int?, val courseId: String?, val versionId: String)
 
 @Dao
 interface JournalDao {

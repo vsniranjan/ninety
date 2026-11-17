@@ -14,7 +14,14 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -66,11 +73,11 @@ class RoomNinetyRepositoryTest {
     ) {
         semesterId = repository.createSemester(SemesterSetup("Spring", start, zone.id,
             listOf(
-                CourseSetup(mathId, CourseInput("Mathematics", "MA", CourseType.THEORY),
+                CourseSetup(mathId, CourseInput("Mathematics", CourseType.THEORY),
                     OpeningBalance(mathId, monday)),
-                CourseSetup(physId, CourseInput("Physics", "PH", CourseType.THEORY),
+                CourseSetup(physId, CourseInput("Physics", CourseType.THEORY),
                     OpeningBalance(physId, monday)),
-                CourseSetup(labId, CourseInput("Physics Lab", "PHL", CourseType.LAB),
+                CourseSetup(labId, CourseInput("Physics Lab", CourseType.LAB),
                     OpeningBalance(labId, monday)),
             ), template))
         repository.ensureMaterialized(semesterId)
@@ -254,7 +261,7 @@ class RoomNinetyRepositoryTest {
         seedSemester()
         val tuesday = LocalDate.of(2025, 1, 7)
         repository.copyWeekday(semesterId, tuesday, DayOfWeek.WEDNESDAY)
-        val recorded = sessionsOf(tuesday).first()
+        val recorded = sessionsOf(tuesday).first { it.courseId == labId }
         repository.recordPeriod(recorded.id, AttendanceOutcome.PRESENT)
         val recopy = repository.copyWeekday(semesterId, tuesday, DayOfWeek.MONDAY)
         assertTrue(recopy.conflicts.isNotEmpty())
@@ -430,7 +437,7 @@ class RoomNinetyRepositoryTest {
         val phys = sessionsOf(today).single { it.courseId == physId }
         repository.applyDutyLeave(semesterId, listOf(phys.id), "Festival", replace = true)
         val before = repository.observeCourseStats(semesterId, today).first()
-            .associate { it.course.code to it.summary }
+            .associate { it.course.id to it.summary }
         val bytes = repository.exportBackup()
 
         val db2 = Room.inMemoryDatabaseBuilder(
@@ -443,12 +450,12 @@ class RoomNinetyRepositoryTest {
             assertEquals(3, preview.courses)
             repo2.restoreBackup(bytes)
             val after = repo2.observeCourseStats(semesterId, today).first()
-                .associate { it.course.code to it.summary }
-            before.forEach { (code, summary) ->
-                val restored = after.getValue(code)
-                assertEquals("$code conducted", summary.conducted, restored.conducted)
-                assertEquals("$code credited", summary.credited, restored.credited)
-                assertEquals("$code pending", summary.pendingDl, restored.pendingDl)
+                .associate { it.course.id to it.summary }
+            before.forEach { (courseId, summary) ->
+                val restored = after.getValue(courseId)
+                assertEquals("$courseId conducted", summary.conducted, restored.conducted)
+                assertEquals("$courseId credited", summary.credited, restored.credited)
+                assertEquals("$courseId pending", summary.pendingDl, restored.pendingDl)
             }
             assertEquals(1, repo2.observeDlStats(semesterId).first().pending)
         } finally {
@@ -464,6 +471,33 @@ class RoomNinetyRepositoryTest {
             .replace("\"conducted\":0", "\"conducted\":-1")
         assertTrue(runCatching { repository.validateBackup(tampered.toByteArray()) }.isFailure)
         assertTrue(repository.observeCourseStats(semesterId, today).first().isNotEmpty())
+    }
+
+    @Test
+    fun `legacy course labels are ignored without losing the schedule or recorded attendance`() = runTest {
+        seedSemester()
+        val period = sessionsOf(today).first { it.courseId == labId }
+        repository.recordPeriod(period.id, AttendanceOutcome.PRESENT)
+
+        val fresh = Json.parseToJsonElement(repository.exportBackup().decodeToString()).jsonObject
+        val courses = fresh.getValue("courses").jsonArray
+        assertTrue(courses.all { "code" !in it.jsonObject && "normalizedCode" !in it.jsonObject })
+        val legacyCourses = courses.mapIndexed { index, course ->
+            JsonObject(course.jsonObject + mapOf(
+                "code" to JsonPrimitive("Lab-$index"), "normalizedCode" to JsonPrimitive("LAB-$index"),
+            ))
+        }
+        val legacy = JsonObject(fresh + mapOf("format" to JsonPrimitive(1), "courses" to JsonArray(legacyCourses)))
+            .toString().encodeToByteArray()
+        assertEquals(1, repository.validateBackup(legacy).formatVersion)
+        repository.restoreBackup(legacy)
+        repository.updateCourse(labId, CourseInput("Experimental Physics Laboratory", CourseType.LAB))
+
+        val restored = sessionsOf(today).single { it.id == period.id }
+        assertEquals(labId, restored.courseId)
+        assertEquals("Experimental Physics Laboratory", restored.courseName)
+        assertEquals(AttendanceOutcome.PRESENT, restored.outcome)
+        assertTrue(repository.currentTemplate(semesterId).first().assignments.values.any { labId in it.values })
     }
 
     // ---------------------------------------------------------------- semester lifecycle
@@ -491,4 +525,114 @@ class RoomNinetyRepositoryTest {
                 arrayOf(mathId.toString()))
         }.isFailure)
     }
+    @Test fun `mark all includes counted extras and leaves supplemental extras alone`() = runTest {
+        seedSemester()
+        val counted = repository.addExtra(semesterId, today, mathId, 1020, 1080, true)
+        val supplemental = repository.addExtra(semesterId, today, mathId, 1080, 1140, false)
+        assertEquals(6, repository.markAllPresent(semesterId, today))
+        assertEquals(AttendanceOutcome.PRESENT, sessionsOf(today).single { it.id == counted }.outcome)
+        assertEquals(AttendanceOutcome.UNRECORDED, sessionsOf(today).single { it.id == supplemental }.outcome)
+    }
+
+    @Test fun `empty timetable revision remains visible and projects no old classes`() = runTest {
+        seedSemester()
+        repository.saveTemplate(semesterId, WeekTemplate(), today)
+        assertTrue(repository.currentTemplate(semesterId).first().isEmpty())
+        assertEquals(2, repository.observeTemplates(semesterId).first().size)
+        assertTrue(dayView(today.plusWeeks(1)).groups.all { group ->
+            group.cells.all { it.projectedCourseId == null }
+        })
+    }
+
+    @Test fun `undo same-date timetable replacement restores the replaced snapshot`() = runTest {
+        seedSemester()
+        val first = WeekTemplate(mapOf(DayOfWeek.WEDNESDAY to mapOf(1 to mathId)))
+        val second = WeekTemplate(mapOf(DayOfWeek.WEDNESDAY to mapOf(2 to physId)))
+        repository.saveTemplate(semesterId, first, today)
+        repository.saveTemplate(semesterId, second, today)
+        assertEquals(UndoResult.DONE, undoLatest())
+        assertEquals(first, repository.currentTemplate(semesterId).first())
+        assertEquals(mathId, sessionsOf(today).single().courseId)
+    }
+
+    @Test fun `weekday copy replaces clean slots outside the source and undo restores them`() = runTest {
+        seedSemester()
+        val before = sessionsOf(today).map { it.id to it.courseId }.toSet()
+        val copied = repository.copyWeekday(semesterId, today, DayOfWeek.MONDAY)
+        assertEquals(DayKind.COPIED, copied.kind)
+        assertEquals(2, sessionsOf(today).size)
+        assertEquals(UndoResult.DONE, undoLatest())
+        assertEquals(before, sessionsOf(today).map { it.id to it.courseId }.toSet())
+    }
+
+    @Test fun `weekday copy preserves a recorded slot outside the source as a conflict`() = runTest {
+        seedSemester()
+        val lab = sessionsOf(today).first { it.courseId == labId }
+        repository.recordPeriod(lab.id, AttendanceOutcome.PRESENT)
+        val result = repository.copyWeekday(semesterId, today, DayOfWeek.MONDAY)
+        assertEquals(DayKind.CUSTOM, result.kind)
+        assertTrue(result.conflicts.any { it.sessionId == lab.id })
+        assertEquals(AttendanceOutcome.PRESENT, sessionsOf(today).single { it.id == lab.id }.outcome)
+    }
+
+    @Test fun `weekend without a copied timetable has no normal slots`() = runTest {
+        seedSemester()
+        assertTrue(dayView(today.plusDays(3)).groups.isEmpty())
+    }
+
+    @Test fun `retired courses leave future templates and retain historical statistics`() = runTest {
+        seedSemester()
+        val before = sessionsOf(monday).first { it.courseId == mathId }
+        repository.recordPeriod(before.id, AttendanceOutcome.PRESENT)
+        repository.retireCourse(mathId)
+        assertTrue(repository.currentTemplate(semesterId).first().assignments.values.none { mathId in it.values })
+        assertEquals(1L, stats(mathId).summary.physicallyPresent)
+        assertTrue(repository.observeCourses(semesterId).first().single { it.id == mathId.toString() }.retired)
+    }
+
+    @Test fun `opening balance changes emit fresh live statistics`() = kotlinx.coroutines.runBlocking {
+        seedSemester()
+        val channel = kotlinx.coroutines.channels.Channel<List<CourseStats>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+        val collection = launch {
+            repository.observeCourseStats(semesterId, today).collect { channel.send(it) }
+        }
+        try {
+            kotlinx.coroutines.withTimeout(10_000) { channel.receive() }
+            repository.correctOpeningBalance(OpeningBalance(mathId, monday.plusDays(1), 40, 38))
+            val changed = kotlinx.coroutines.withTimeout(10_000) {
+                var value: CourseStats
+                do { value = channel.receive().single { it.course.id == mathId.toString() } }
+                while (value.summary.conducted != 40L)
+                value
+            }
+            assertEquals(38L, changed.summary.credited)
+            assertEquals(2L, changed.summary.safeSkips)
+        } finally { collection.cancel(); channel.close() }
+    }
+
+    @Test fun `backup preview rejects duplicate identities missing balances overflow and bad dates`() = runTest {
+        seedSemester()
+        val original = repository.exportBackup()
+        val json = kotlinx.serialization.json.Json { encodeDefaults = true }
+        val backup = json.decodeFromString(BackupFile.serializer(), original.decodeToString())
+        val invalid = listOf(
+            backup.copy(semesters = backup.semesters + backup.semesters.first()),
+            backup.copy(courses = backup.courses + backup.courses.first()),
+            backup.copy(versions = backup.versions + backup.versions.first()),
+            backup.copy(sessions = backup.sessions + backup.sessions.first()),
+            backup.copy(balances = backup.balances.drop(1)),
+            backup.copy(balances = backup.balances + backup.balances.first()),
+            backup.copy(semesters = listOf(backup.semesters.first().copy(id = "broken"))),
+            backup.copy(semesters = listOf(backup.semesters.first().copy(startDay = Long.MAX_VALUE))),
+            backup.copy(balances = listOf(backup.balances.first().copy(present = Long.MAX_VALUE,
+                approvedDl = Long.MAX_VALUE)) + backup.balances.drop(1)),
+        )
+        invalid.forEachIndexed { index, bad ->
+            val bytes = json.encodeToString(BackupFile.serializer(), bad).toByteArray()
+            assertTrue("Invalid backup $index passed preview", runCatching { repository.validateBackup(bytes) }.isFailure)
+            assertTrue("Invalid backup $index restored", runCatching { repository.restoreBackup(bytes) }.isFailure)
+            org.junit.Assert.assertArrayEquals(original, repository.exportBackup())
+        }
+    }
+
 }

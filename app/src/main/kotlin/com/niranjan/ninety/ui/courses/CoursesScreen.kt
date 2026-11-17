@@ -4,30 +4,29 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,9 +35,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -52,11 +56,9 @@ import com.niranjan.ninety.domain.CourseType
 import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.ui.designsystem.AttendanceBar
 import com.niranjan.ninety.ui.designsystem.ConfirmDialog
-import com.niranjan.ninety.ui.designsystem.CourseBadge
-import com.niranjan.ninety.ui.designsystem.EmptyState
 import com.niranjan.ninety.ui.designsystem.NinetyCard
+import com.niranjan.ninety.ui.designsystem.ChoiceRow
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
-import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.ninetyViewModel
 import com.niranjan.ninety.ui.percentOf
 import java.time.LocalDate
@@ -79,7 +81,7 @@ fun CoursesScreen(semesterId: UUID, snackbar: SnackbarHostState, onEditTimetable
             Column(Modifier.weight(1f)) {
                 Text("Courses", style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold)
-                Text("90% minimum · per course", style = MaterialTheme.typography.bodySmall,
+                Text("90% minimum", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onEditTimetable) { Text("Timetable") }
@@ -111,8 +113,8 @@ fun CoursesScreen(semesterId: UUID, snackbar: SnackbarHostState, onEditTimetable
             onSave = { input -> model.updateCourse(UUID.fromString(d.stats.course.id), input); dialog = null })
         is CourseDialog.Balance -> BalanceDialog(d.stats, onDismiss = { dialog = null },
             onSave = { model.correctBalance(it); dialog = null })
-        is CourseDialog.Retire -> ConfirmDialog("Retire ${d.stats.course.code}?",
-            "The course and its history are kept, but it leaves the timetable and lists.",
+        is CourseDialog.Retire -> ConfirmDialog("Retire ${d.stats.course.name}?",
+            "Scheduling stops from tomorrow. Today's classes and all past attendance are kept.",
             "Retire", destructive = true,
             onConfirm = { model.retireCourse(UUID.fromString(d.stats.course.id)); dialog = null },
             onDismiss = { dialog = null })
@@ -130,109 +132,150 @@ private sealed interface CourseDialog {
 @Composable
 private fun CourseCard(item: CourseStats, onEdit: () -> Unit, onBalance: () -> Unit,
     onResolveDl: (Boolean) -> Unit, onRetire: () -> Unit) {
-    val s = item.summary
+    val summary = item.summary
+    val hasAttendance = summary.conducted > 0
+    val hasDetails = hasAttendance || summary.hasIncompleteData || item.balance.pendingDl > 0
+    val stackPercentage = LocalDensity.current.fontScale > 1.3f
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+
     NinetyCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    CourseBadge(item.course.code, typeLabel(item.course.type))
-                    Text(item.course.name, style = MaterialTheme.typography.bodyMedium,
+                Column(Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(item.course.name, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    Text(typeLabel(item.course.type),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                PercentageBadge(s)
-                var menu by remember { mutableStateOf(false) }
+                if (hasAttendance && !stackPercentage) CoursePercentage(summary)
                 Box {
                     IconButton(onClick = { menu = true }) {
-                        Icon(painterResource(R.drawable.ic_more), "Course actions")
+                        Icon(painterResource(R.drawable.ic_more), "Actions for ${item.course.name}")
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Edit course") }, onClick = { menu = false; onEdit() })
                         DropdownMenuItem(text = { Text("Edit opening balance") }, onClick = { menu = false; onBalance() })
-                        DropdownMenuItem(text = { Text("Retire course") }, onClick = { menu = false; onRetire() })
+                        if (!item.course.retired) {
+                            DropdownMenuItem(text = { Text("Retire course") }, onClick = { menu = false; onRetire() })
+                        }
                     }
                 }
             }
-            AttendanceBar(s.credited, s.conducted)
-            StatsLine(s)
-            if (s.hasIncompleteData) {
-                Text("Incomplete — ${s.missingPastPeriods} past ${if (s.missingPastPeriods == 1L) "period" else "periods"} unrecorded",
-                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+            if (hasAttendance) {
+                if (stackPercentage) CoursePercentage(summary)
+                AttendanceBar(summary.credited, summary.conducted,
+                    modifier = Modifier.padding(top = 10.dp, end = 4.dp))
             }
-            if (item.balance.pendingDl > 0) {
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${item.balance.pendingDl} opening DL pending",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { onResolveDl(true) }) { Text("Approve") }
-                    TextButton(onClick = { onResolveDl(false) }) { Text("Reject") }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                Column(Modifier.weight(1f).padding(vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(attendanceNextStep(summary), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (summary.isProvisional || summary.hasIncompleteData || item.course.retired) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (summary.isProvisional) Text("Provisional", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (summary.hasIncompleteData) Text("Past records missing", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error)
+                            if (item.course.retired) Text("Retired", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (hasDetails) {
+                    TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }) {
+                        Text(if (expanded) "Hide details" else "Details")
+                        Spacer(Modifier.width(2.dp))
+                        Icon(painterResource(R.drawable.ic_forward), contentDescription = null,
+                            modifier = Modifier.size(16.dp).rotate(if (expanded) -90f else 90f))
+                    }
                 }
             }
+            if (hasDetails && expanded) {
+                HorizontalDivider(Modifier.padding(end = 4.dp))
+                AttendanceDetails(item, onResolveDl)
+            }
         }
     }
 }
 
 @Composable
-private fun PercentageBadge(s: AttendanceSummary) {
-    Column(horizontalAlignment = Alignment.End) {
-        Text(if (s.conducted == 0L) "—" else percentOf(s.credited, s.conducted),
-            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
-            color = when (s.meetsMinimum) {
-                true -> MaterialTheme.colorScheme.primary
-                false -> MaterialTheme.colorScheme.error
-                null -> MaterialTheme.colorScheme.onSurfaceVariant
-            })
-        if (s.isProvisional) {
-            Text("provisional", style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary)
+private fun CoursePercentage(summary: AttendanceSummary) {
+    Text(percentOf(summary.credited, summary.conducted),
+        style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+        color = if (summary.meetsMinimum == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+}
+
+private fun attendanceNextStep(summary: AttendanceSummary): String {
+    val recovery = summary.recovery ?: return "No attendance recorded"
+    val skips = summary.safeSkips ?: 0L
+    return when {
+        recovery > 0 -> "Attend the next ${periodCount(recovery)}"
+        skips > 0 -> "Can miss ${periodCount(skips)}"
+        else -> "No safe skips"
+    }
+}
+
+private fun periodCount(count: Long) = "$count ${if (count == 1L) "period" else "periods"}"
+
+@Composable
+private fun AttendanceDetails(item: CourseStats, onResolveDl: (Boolean) -> Unit) {
+    val summary = item.summary
+    Column(Modifier.padding(top = 10.dp, end = 4.dp, bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (summary.conducted > 0) {
+            DetailRow("Credited", "${summary.credited} / ${summary.conducted}")
+            DetailRow("Physically present", summary.physicallyPresent.toString())
+            if (summary.approvedDl > 0) DetailRow("Approved leave", summary.approvedDl.toString())
+            if (summary.pendingDl > 0) DetailRow("Pending leave", summary.pendingDl.toString())
+            if (summary.datedRejectedDl > 0) DetailRow("Rejected leave", summary.datedRejectedDl.toString())
+            if (summary.isProvisional) DetailRow("Confirmed (without pending leave)",
+                percentOf(summary.confirmedCredited, summary.conducted))
+        }
+        if (summary.hasIncompleteData) {
+            DetailRow("Past periods unrecorded", summary.missingPastPeriods.toString())
+        }
+        if (item.balance.pendingDl > 0) {
+            DetailRow("Opening leave pending", item.balance.pendingDl.toString())
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onResolveDl(true) }) { Text("Approve opening leave") }
+                TextButton(onClick = { onResolveDl(false) }) { Text("Reject opening leave") }
+            }
         }
     }
 }
 
 @Composable
-private fun StatsLine(s: AttendanceSummary) {
-    val text = when {
-        s.conducted == 0L -> "No attendance yet"
-        else -> buildString {
-            append("${s.credited}/${s.conducted} credited")
-            s.safeSkips?.let { if (it > 0) append(" · can miss $it") }
-            s.recovery?.let { if (it > 0) append(" · attend next $it to reach 90%") }
-            if (s.isProvisional) append(" · ${s.pendingDl} pending DL")
-        }
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
-    Text(text, style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
 private fun CourseFormDialog(existing: CourseStats?, onDismiss: () -> Unit,
     onSave: (CourseInput) -> Unit) {
     var name by remember { mutableStateOf(existing?.course?.name ?: "") }
-    var code by remember { mutableStateOf(existing?.course?.code ?: "") }
     var type by remember { mutableStateOf(existing?.course?.type?.let { runCatching { CourseType.valueOf(it) }.getOrDefault(CourseType.THEORY) } ?: CourseType.THEORY) }
     AlertDialog(onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "Add a course" else "Edit ${existing.course.code}") },
+        title = { Text(if (existing == null) "Add a course" else "Edit ${existing.course.name}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it },
                     label = { Text("Course name") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("course_name"))
-                OutlinedTextField(value = code, onValueChange = { code = it },
-                    label = { Text("Short code") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("course_code"))
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    CourseType.entries.forEachIndexed { index, t ->
-                        SegmentedButton(selected = type == t, onClick = { type = t },
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = 3)) {
-                            Text(typeLabel(t.name))
-                        }
-                    }
-                }
+                ChoiceRow(CourseType.entries.map { it.name to typeLabel(it.name) }, type.name,
+                    onSelect = { type = CourseType.valueOf(it) })
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank() && code.isNotBlank()) onSave(CourseInput(name, code, type)) },
-                enabled = name.isNotBlank() && code.isNotBlank(),
+            TextButton(onClick = { if (name.isNotBlank()) onSave(CourseInput(name, type, existing?.course?.colorArgb)) },
+                enabled = name.isNotBlank(),
                 modifier = Modifier.testTag("course_save")) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
@@ -248,9 +291,9 @@ private fun BalanceDialog(item: CourseStats, onDismiss: () -> Unit, onSave: (Ope
     var pending by remember { mutableStateOf(b.pendingDl.toString()) }
     var pickDate by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Opening balance · ${item.course.code}") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Opening balance · ${item.course.name}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Counts cover attendance before the first logging date.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)

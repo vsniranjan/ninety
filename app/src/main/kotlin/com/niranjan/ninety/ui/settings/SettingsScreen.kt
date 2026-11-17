@@ -8,6 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +37,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.niranjan.ninety.data.BackupCodec
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.ui.designsystem.ConfirmDialog
 import com.niranjan.ninety.ui.designsystem.NinetyCard
+import com.niranjan.ninety.ui.designsystem.ChoiceRow
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.ninetyViewModel
 import com.niranjan.ninety.ui.short
@@ -54,7 +64,8 @@ import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {}) {
+fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
+    onViewSemester: (java.util.UUID) -> Unit = {}, onActiveChanged: () -> Unit = {}) {
     val model = ninetyViewModel<SettingsViewModel>(key = "settings") { SettingsViewModel(it) }
     val state by model.appState.collectAsStateWithLifecycle()
     val message by model.messages.collectAsStateWithLifecycle()
@@ -62,6 +73,7 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {}) 
     val busy by model.busy.collectAsStateWithLifecycle()
     val pendingRestore by model.pendingRestore.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var confirmComplete by remember { mutableStateOf<SemesterInfo?>(null) }
     var pickTime by remember { mutableStateOf(false) }
 
@@ -76,12 +88,16 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {}) 
     }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            runCatching {
-                val bytes = context.contentResolver.openInputStream(it)?.use { stream -> stream.readBytes() }
-                if (bytes == null) model.messages.value = "Could not read that file."
-                else model.previewRestore(bytes)
-            }.onFailure { model.messages.value = "Could not read that file." }
+        uri?.let { chosen ->
+            scope.launch {
+                runCatching {
+                    val bytes = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(chosen)?.use(BackupCodec::read)
+                    }
+                    if (bytes == null) model.messages.value = "Could not read that file."
+                    else model.previewRestore(bytes)
+                }.onFailure { model.messages.value = it.message ?: "Could not read that file." }
+            }
         }
     }
     val notificationPermission = rememberLauncherForActivityResult(
@@ -103,16 +119,8 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {}) 
         SectionLabel("Appearance")
         NinetyCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    listOf("SYSTEM" to "System", "LIGHT" to "Light", "DARK" to "Dark")
-                        .forEachIndexed { index, (value, label) ->
-                            SegmentedButton(selected = state.settings.theme == value,
-                                onClick = { model.setTheme(value) },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = 3)) {
-                                Text(label)
-                            }
-                        }
-                }
+                ChoiceRow(listOf("SYSTEM" to "System", "LIGHT" to "Light", "DARK" to "Dark"),
+                    selected = state.settings.theme, onSelect = model::setTheme)
                 SettingSwitch("Haptic feedback", state.settings.haptics, model::setHaptics)
             }
         }
@@ -149,25 +157,34 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {}) 
         }
         state.semesters.forEach { semester ->
             NinetyCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(semester.entity.name, style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold)
-                        Text("Started ${LocalDate.ofEpochDay(semester.entity.startDay).short()}" +
-                            if (semester.entity.archived) " · done" else "", 
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(semester.entity.name, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    Text("Started ${LocalDate.ofEpochDay(semester.entity.startDay).short()}" +
+                        if (semester.entity.archived) " · done" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onViewSemester(java.util.UUID.fromString(semester.entity.id)) },
+                            modifier = Modifier.testTag("browse_${semester.entity.id}")) { Text("Browse") }
+                        if (state.activeSemesterId?.toString() == semester.entity.id) {
+                            Text("Active", style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(vertical = 16.dp))
+                        } else if (!semester.entity.archived) {
+                            TextButton(onClick = { model.activateSemester(semester); onActiveChanged() }) {
+                                Text("Activate")
+                            }
+                        }
+                        if (state.activeSemesterId?.toString() == semester.entity.id || semester.entity.archived) {
+                            TextButton(onClick = {
+                                if (!semester.entity.archived) confirmComplete = semester
+                                else { model.completeSemester(semester, false); onActiveChanged() }
+                            }, modifier = Modifier.testTag("semester_lifecycle_${semester.entity.id}")) {
+                                Text(if (semester.entity.archived) "Reopen" else "Done")
+                            }
+                        }
                     }
-                    if (state.activeSemesterId?.toString() == semester.entity.id) {
-                        Text("Active", style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary)
-                    } else if (!semester.entity.archived) {
-                        TextButton(onClick = { model.activateSemester(semester) }) { Text("Activate") }
-                    }
-                    TextButton(onClick = {
-                        if (!semester.entity.archived) confirmComplete = semester
-                        else model.completeSemester(semester, false)
-                    }) { Text(if (semester.entity.archived) "Reopen" else "Done") }
                 }
             }
         }
@@ -178,7 +195,7 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {}) 
                 Text("Everything stays on this device. Export a file you can restore on this or another phone.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { exportLauncher.launch("ninety-backup.json") },
                         enabled = !busy, modifier = Modifier.testTag("export_backup")) { Text("Export") }
                     OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
@@ -228,14 +245,16 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {}) 
                 }) { Text("Set") }
             },
             dismissButton = { TextButton(onClick = { pickTime = false }) { Text("Cancel") } },
-            text = { TimePicker(timeState) })
+            text = { androidx.compose.material3.TimeInput(timeState) })
     }
 }
 
 @Composable
 private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+        .toggleable(checked, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

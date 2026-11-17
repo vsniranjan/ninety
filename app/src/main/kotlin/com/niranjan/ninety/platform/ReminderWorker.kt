@@ -27,7 +27,10 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
     companion object {
         suspend fun schedule(context: Context, repository: NinetyRepository) {
             val app = context.applicationContext as com.niranjan.ninety.NinetyApplication
-            val settings = repository.observeAppState().first().settings
+            val state = repository.observeAppState().first()
+            val settings = state.settings
+            val zone = state.activeSemester?.entity?.collegeZone?.let(java.time.ZoneId::of)
+                ?: java.time.ZoneId.systemDefault()
             val work = WorkManager.getInstance(context)
             if (!settings.reminderEnabled) {
                 work.cancelUniqueWork(WORK_NAME)
@@ -35,7 +38,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
             work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE,
                 PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
-                    .setInitialDelay(ReminderNotifier.initialDelayMinutes(settings.reminderMinute), TimeUnit.MINUTES)
+                    .setInitialDelay(ReminderNotifier.initialDelayMinutes(settings.reminderMinute, java.time.LocalDateTime.now(zone)), TimeUnit.MINUTES)
                     .build())
         }
 

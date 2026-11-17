@@ -57,8 +57,8 @@ class SetupViewModelTest {
         return model
     }
 
-    private fun draft(name: String = "Mathematics", code: String = "MA") =
-        CourseDraft(name = name, code = code, type = CourseType.THEORY)
+    private fun draft(name: String = "Mathematics") =
+        CourseDraft(name = name, type = CourseType.THEORY)
 
     @Test fun semesterStepRequiresFields() = runTest(dispatcher) {
         val model = SetupViewModel(repository)
@@ -84,10 +84,10 @@ class SetupViewModelTest {
         assertEquals(2, model.state.value.step)
     }
 
-    @Test fun duplicateCodesAreRejected() = runTest(dispatcher) {
+    @Test fun duplicateNamesAreRejected() = runTest(dispatcher) {
         val model = validModel()
-        model.addCourse(draft(code = "MA"))
-        model.addCourse(draft(name = "Mechanics", code = "ma"))
+        model.addCourse(draft())
+        model.addCourse(draft(name = " mathematics "))
         model.next()
         model.next()
         assertNotNull(model.state.value.error)

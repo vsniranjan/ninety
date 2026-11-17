@@ -45,7 +45,7 @@ class RoomSetupRepository(
         rows.map { row ->
             val semester = Semester(UUID.fromString(row.semesterId), row.semesterName,
                 LocalDate.ofEpochDay(row.startDay), ZoneId.of(row.collegeZone), row.archived)
-            val course = Course(UUID.fromString(row.courseId), semester.id, row.courseName, row.courseCode,
+            val course = Course(UUID.fromString(row.courseId), semester.id, row.courseName,
                 CourseType.valueOf(row.courseType))
             val balance = OpeningBalance(course.id, LocalDate.ofEpochDay(row.loggingStartDay),
                 row.conducted, row.present, row.approvedDl, row.pendingDl)
@@ -63,8 +63,7 @@ class RoomSetupRepository(
             val b = setup.balance
             database.setupDao().insertSemester(SemesterEntity(s.id.toString(), s.name.trim(),
                 s.startDate.toEpochDay(), s.collegeZone.id))
-            database.setupDao().insertCourse(CourseEntity(c.id.toString(), s.id.toString(), c.name.trim(),
-                c.code.trim(), c.code.trim().uppercase(java.util.Locale.ROOT), c.type.name))
+            database.setupDao().insertCourse(CourseEntity(c.id.toString(), s.id.toString(), c.name.trim(), c.type.name))
             database.setupDao().insertBalance(OpeningBalanceEntity(c.id.toString(), b.loggingStartDate.toEpochDay(),
                 b.conducted, b.present, b.approvedDl, b.pendingDl))
             database.setupDao().insertSettings(AppSettingsEntity(activeSemesterId = s.id.toString()))

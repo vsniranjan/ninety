@@ -11,7 +11,6 @@ import java.util.UUID
 class ReminderScheduler(private val context: Context, private val repository: NinetyRepository) {
     /** Reconcile scheduled work with stored settings; safe to call after any change. */
     suspend fun reconcile() {
-        // Implemented in the reminders feature (WorkManager registration lives there).
         ReminderWorker.schedule(context, repository)
     }
 

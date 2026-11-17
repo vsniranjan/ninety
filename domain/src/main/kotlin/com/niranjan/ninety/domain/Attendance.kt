@@ -25,12 +25,10 @@ data class Course(
     val id: UUID,
     val semesterId: UUID,
     val name: String,
-    val code: String,
     val type: CourseType,
 ) {
     init {
         require(name.isNotBlank()) { "Enter a course name." }
-        require(code.isNotBlank()) { "Enter a course code." }
     }
 }
 

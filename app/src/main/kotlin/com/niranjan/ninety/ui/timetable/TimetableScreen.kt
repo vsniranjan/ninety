@@ -42,6 +42,7 @@ import com.niranjan.ninety.domain.PeriodTimes
 import com.niranjan.ninety.domain.WeekTemplate
 import com.niranjan.ninety.ui.collegeWeekdays
 import com.niranjan.ninety.ui.designsystem.NinetyCard
+import com.niranjan.ninety.ui.designsystem.WeeklySchedule
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.fullName
@@ -102,7 +103,7 @@ fun TimetableScreen(semesterId: UUID, snackbar: SnackbarHostState, onDone: () ->
                 model.edit(day, slot, course)
             }
         } else if (versions.isEmpty()) {
-            Text("No timetable yet. Edit to place your courses on the weekly grid.",
+            Text("No timetable yet. Edit to place your courses on the weekly timetable.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 24.dp))
@@ -112,7 +113,7 @@ fun TimetableScreen(semesterId: UUID, snackbar: SnackbarHostState, onDone: () ->
                 Spacer(Modifier.height(16.dp))
                 SectionLabel("Earlier versions")
                 versions.dropLast(1).asReversed().forEach { version ->
-                    Text("Until ${version.effectiveFrom.medium()}",
+                    Text("From ${version.effectiveFrom.medium()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 4.dp))
@@ -129,7 +130,7 @@ fun TimetableScreen(semesterId: UUID, snackbar: SnackbarHostState, onDone: () ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Recorded or cancelled periods kept their stored course:")
                     list.take(6).forEach {
-                        Text("· ${it.date.medium()} P${it.slot ?: "?"} kept ${it.courseCode}",
+                        Text("· ${it.date.medium()} P${it.slot ?: "?"} kept ${it.courseName}",
                             style = MaterialTheme.typography.bodySmall)
                     }
                     if (list.size > 6) Text("· and ${list.size - 6} more",
@@ -148,57 +149,6 @@ fun TimetableScreen(semesterId: UUID, snackbar: SnackbarHostState, onDone: () ->
 @Composable
 private fun TimetableGrid(template: WeekTemplate, courses: List<CourseEntity>,
     editable: Boolean, onAssign: (java.time.DayOfWeek, Int, UUID?) -> Unit) {
-    val codeOf = courses.associate { it.id to it.code }
-    NinetyCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Row(Modifier.fillMaxWidth()) {
-                Spacer(Modifier.width(34.dp))
-                collegeWeekdays().forEach { day ->
-                    Text(day.shortName(), Modifier.weight(1f), textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            (1..PeriodTimes.SLOT_COUNT).forEach { slot ->
-                Spacer(Modifier.height(6.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("P$slot", Modifier.width(34.dp), style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    collegeWeekdays().forEach { day ->
-                        Box(Modifier.weight(1f).padding(horizontal = 2.dp)) {
-                            SlotCell(template.courseAt(day, slot), codeOf, editable) { course ->
-                                onAssign(day, slot, course)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SlotCell(courseId: UUID?, codes: Map<String, String>, editable: Boolean,
-    onAssign: (UUID?) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val code = courseId?.let { codes[it.toString()] }
-    Surface(
-        color = if (code != null) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.fillMaxWidth().height(40.dp).then(
-            if (editable) Modifier.clickable { open = true }.testTag("slot_cell") else Modifier)) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(code ?: "", style = MaterialTheme.typography.labelMedium,
-                color = if (code != null) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant)
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                DropdownMenuItem(text = { Text("Free") }, onClick = { open = false; onAssign(null) })
-                codes.forEach { (id, label) ->
-                    DropdownMenuItem(text = { Text(label) },
-                        onClick = { open = false; onAssign(UUID.fromString(id)) })
-                }
-            }
-        }
-    }
+    WeeklySchedule(template, courses.filter { !it.retired }.associate { UUID.fromString(it.id) to it.name },
+        editable = editable, onAssign = onAssign)
 }

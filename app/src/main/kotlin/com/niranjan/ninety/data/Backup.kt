@@ -6,11 +6,15 @@ import java.time.Clock
 import java.time.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
 
 /** Versioned portable backup. Field order mirrors the relational model. */
 @Serializable
 data class BackupFile(
-    val format: Int = 1,
+    val format: Int,
     val app: String = "ninety",
     val createdAt: String,
     val settings: BackupSettings,
@@ -44,8 +48,8 @@ data class BackupSemester(
 
 @Serializable
 data class BackupCourse(
-    val id: String, val semesterId: String, val name: String, val code: String,
-    val normalizedCode: String, val type: String, val colorArgb: Long? = null, val retired: Boolean = false,
+    val id: String, val semesterId: String, val name: String,
+    val type: String, val colorArgb: Long? = null, val retired: Boolean = false,
 )
 
 @Serializable
@@ -89,7 +93,9 @@ data class BackupBatch(val id: String, val kind: String, val createdAt: Long, va
 class BackupException(message: String) : Exception(message)
 
 object BackupCodec {
-    const val FORMAT_VERSION = 1
+    const val FORMAT_VERSION = 2
+    private const val LEGACY_FORMAT_VERSION = 1
+    const val MAX_BYTES = 64 * 1024 * 1024
     private val json = Json { ignoreUnknownKeys = false; encodeDefaults = true }
 
     suspend fun export(db: NinetyDatabase, clock: Clock): ByteArray {
@@ -103,7 +109,7 @@ object BackupCodec {
                 semesters = db.setupDao().semesters().map {
                     BackupSemester(it.id, it.name, it.startDay, it.collegeZone, it.archived, it.completedDay, it.materializedDay) },
                 courses = db.setupDao().semesters().flatMap { db.setupDao().courses(it.id) }.map {
-                    BackupCourse(it.id, it.semesterId, it.name, it.code, it.normalizedCode, it.type, it.colorArgb, it.retired) },
+                    BackupCourse(it.id, it.semesterId, it.name, it.type, it.colorArgb, it.retired) },
                 balances = db.setupDao().balances().map {
                     BackupBalance(it.courseId, it.loggingStartDay, it.conducted, it.present, it.approvedDl, it.pendingDl, it.revision) },
                 versions = db.setupDao().semesters().flatMap { db.scheduleDao().versions(it.id) }.map {
@@ -126,19 +132,46 @@ object BackupCodec {
         return json.encodeToString(BackupFile.serializer(), data).toByteArray(Charsets.UTF_8)
     }
 
+    /** Bounds file-picker reads before allocating or parsing an entire untrusted document. */
+    fun read(input: java.io.InputStream): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) return output.toByteArray()
+            if (output.size().toLong() + count > MAX_BYTES) throw BackupException("This backup is too large to read safely.")
+            output.write(buffer, 0, count)
+        }
+    }
+
     private fun parse(bytes: ByteArray): BackupFile {
+        if (bytes.size > MAX_BYTES) throw BackupException("This backup is too large to read safely.")
         val text = try {
             bytes.toString(Charsets.UTF_8)
         } catch (e: Exception) { throw BackupException("This file is not a readable backup.") }
-        if (text.length > 64 * 1024 * 1024) throw BackupException("This backup is too large to read safely.")
         return try {
-            json.decodeFromString(BackupFile.serializer(), text)
+            val root = json.parseToJsonElement(text) as JsonObject
+            val format = (root["format"] as? JsonPrimitive)?.intOrNull
+                ?: throw BackupException("This file is not a valid Ninety backup.")
+            val compatible = when (format) {
+                FORMAT_VERSION -> root
+                LEGACY_FORMAT_VERSION -> {
+                    // Existing records already reference stable course IDs, so the labels can be dropped.
+                    val courses = root["courses"] as? JsonArray
+                    if (courses == null) root else JsonObject(root + ("courses" to JsonArray(courses.map {
+                        if (it is JsonObject) JsonObject(it - "code" - "normalizedCode") else it
+                    })))
+                }
+                else -> throw BackupException("This backup uses an unsupported version ($format).")
+            }
+            json.decodeFromJsonElement(BackupFile.serializer(), compatible)
+        } catch (e: BackupException) {
+            throw e
         } catch (e: Exception) { throw BackupException("This file is not a valid Ninety backup.") }
     }
 
     fun validate(bytes: ByteArray): BackupPreview {
         val backup = parse(bytes)
-        if (backup.format != FORMAT_VERSION) throw BackupException("This backup uses an unsupported version (${backup.format}).")
         checkIntegrity(backup)
         return BackupPreview(backup.format, backup.createdAt, backup.semesters.size, backup.courses.size,
             backup.sessions.size, backup.outcomes.size, backup.dlEvents.size)
@@ -153,15 +186,34 @@ object BackupCodec {
         val events = b.dlEvents.associateBy { it.id }
         fun idsUnique(items: List<String>, what: String) {
             if (items.distinct().size != items.size) throw BackupException("Duplicate $what in this backup.") }
-        idsUnique(semesters.keys.toList(), "semester IDs")
-        idsUnique(courses.keys.toList(), "course IDs")
-        idsUnique(versions.keys.toList(), "schedule version IDs")
-        idsUnique(days.keys.toList(), "day IDs")
-        idsUnique(sessions.keys.toList(), "class period IDs")
-        idsUnique(events.keys.toList(), "duty leave event IDs")
+        idsUnique(b.semesters.map { it.id }, "semester IDs")
+        idsUnique(b.courses.map { it.id }, "course IDs")
+        idsUnique(b.versions.map { it.id }, "schedule version IDs")
+        idsUnique(b.days.map { it.id }, "day IDs")
+        idsUnique(b.sessions.map { it.id }, "class period IDs")
+        idsUnique(b.dlEvents.map { it.id }, "duty leave event IDs")
+        idsUnique(b.balances.map { it.courseId }, "opening balances")
+        idsUnique(b.versions.map { "${it.semesterId}:${it.effectiveDay}" }, "schedule effective dates")
+        if (b.app != "ninety") throw BackupException("This file is not a Ninety backup.")
+        fun validId(id: String) {
+            if (runCatching { java.util.UUID.fromString(id).toString() == id }.getOrDefault(false).not())
+                throw BackupException("A record has an invalid identity.")
+        }
+        (semesters.keys + courses.keys + versions.keys + days.keys + sessions.keys + events.keys +
+            b.changeBatches.map { it.id }).forEach(::validId)
+        fun validDay(day: Long) {
+            if (runCatching { java.time.LocalDate.ofEpochDay(day) }.isFailure)
+                throw BackupException("A record has an invalid date.")
+        }
+        if (b.balances.map { it.courseId }.toSet() != courses.keys)
+            throw BackupException("Every course must have exactly one opening balance.")
+        if (b.settings.revision < 0) throw BackupException("Corrupt settings revision.")
         idsUnique(b.outcomes.map { it.sessionId }, "attendance outcomes")
         idsUnique(b.changeBatches.map { it.id }, "change records")
         b.semesters.forEach { s ->
+            validDay(s.startDay)
+            s.completedDay?.let(::validDay)
+            s.materializedDay?.let(::validDay)
             if (s.name.isBlank()) throw BackupException("A semester has no name.")
             runCatching { java.time.ZoneId.of(s.collegeZone) }.getOrElse { throw BackupException("A semester has an invalid timezone.") }
         }
@@ -171,24 +223,26 @@ object BackupCodec {
             val semester = semesters[it] ?: throw BackupException("Settings point to a missing semester.")
             if (semester.archived) throw BackupException("The active semester in this backup is archived.")
         }
-        val codes = b.courses.map { it.semesterId to it.normalizedCode }
-        if (codes.distinct().size != codes.size) throw BackupException("Duplicate course codes in this backup.")
         b.courses.forEach { c ->
             if (c.semesterId !in semesters) throw BackupException("A course belongs to a missing semester.")
-            if (c.type !in setOf("THEORY", "LAB", "OTHER") || c.name.isBlank() || c.code.isBlank())
+            if (c.type !in setOf("THEORY", "LAB", "OTHER") || c.name.isBlank())
                 throw BackupException("A course is invalid in this backup.")
         }
         b.balances.forEach { bal ->
             val course = courses[bal.courseId] ?: throw BackupException("An opening balance belongs to a missing course.")
             val semester = semesters[course.semesterId]!!
-            if (bal.conducted < 0 || bal.conducted > MAX_PERIOD_COUNT || bal.present < 0 ||
-                bal.approvedDl < 0 || bal.pendingDl < 0 ||
-                bal.present + bal.approvedDl + bal.pendingDl > bal.conducted)
+            validDay(bal.loggingStartDay)
+            if (bal.conducted !in 0..MAX_PERIOD_COUNT || bal.present !in 0..bal.conducted ||
+                bal.approvedDl !in 0..(bal.conducted - bal.present) ||
+                bal.pendingDl !in 0..(bal.conducted - bal.present - bal.approvedDl))
                 throw BackupException("An opening balance has impossible counts.")
             if (bal.loggingStartDay < semester.startDay) throw BackupException("A logging start precedes the semester start.")
             if (bal.revision < 0) throw BackupException("Corrupt revision data in this backup.")
         }
-        b.versions.forEach { v -> if (v.semesterId !in semesters) throw BackupException("A schedule belongs to a missing semester.") }
+        b.versions.forEach { v ->
+            validDay(v.effectiveDay)
+            if (v.semesterId !in semesters) throw BackupException("A schedule belongs to a missing semester.")
+        }
         val slotKeys = b.templateSlots.map { Triple(it.versionId, it.weekday, it.slot) }
         if (slotKeys.distinct().size != slotKeys.size) throw BackupException("Duplicate timetable slots in this backup.")
         b.templateSlots.forEach { s ->
@@ -200,6 +254,7 @@ object BackupCodec {
         val dayKeys = b.days.map { it.semesterId to it.day }
         if (dayKeys.distinct().size != dayKeys.size) throw BackupException("Duplicate days in this backup.")
         b.days.forEach { d ->
+            validDay(d.day)
             if (d.semesterId !in semesters) throw BackupException("A day belongs to a missing semester.")
             if (d.kind !in setOf("REGULAR", "COPIED", "CUSTOM")) throw BackupException("A day has an invalid kind.")
             if (d.copiedWeekday != null && d.copiedWeekday !in 1..5) throw BackupException("A copied day has an invalid source weekday.")
@@ -226,7 +281,13 @@ object BackupCodec {
                 throw BackupException("Duty leave records are inconsistent in this backup.")
             if (o.dlStatus != null && o.dlStatus !in setOf("PENDING", "APPROVED", "REJECTED"))
                 throw BackupException("A duty leave status is invalid.")
-            if (o.dlEventId != null && o.dlEventId !in events) throw BackupException("An attendance record references a missing duty leave event.")
+            if (o.dlEventId != null) {
+                val event = events[o.dlEventId] ?: throw BackupException("An attendance record references a missing duty leave event.")
+                if (sessions.getValue(o.sessionId).semesterId != event.semesterId)
+                    throw BackupException("A duty leave record crosses semester boundaries.")
+            }
+            if (o.kind != "DL" && (o.dlStatus != null || o.dlEventId != null))
+                throw BackupException("An attendance record has unexpected duty leave data.")
             if (o.revision < 0) throw BackupException("Corrupt revision data in this backup.")
         }
         b.dlEvents.forEach { e -> if (e.semesterId !in semesters) throw BackupException("A duty leave event belongs to a missing semester.") }
@@ -234,7 +295,6 @@ object BackupCodec {
 
     suspend fun restore(db: NinetyDatabase, bytes: ByteArray, clock: Clock) {
         val backup = parse(bytes)
-        if (backup.format != FORMAT_VERSION) throw BackupException("This backup uses an unsupported version (${backup.format}).")
         checkIntegrity(backup)
         db.withTransaction {
             val setup = db.setupDao(); val schedule = db.scheduleDao(); val journal = db.journalDao()
@@ -243,7 +303,7 @@ object BackupCodec {
                 "template_slot", "schedule_version", "opening_balance", "course", "app_settings", "semester")
                 .forEach { sql.execSQL("DELETE FROM $it") }
             backup.semesters.forEach { setup.insertSemester(SemesterEntity(it.id, it.name, it.startDay, it.collegeZone, it.archived, it.completedDay, it.materializedDay)) }
-            backup.courses.forEach { setup.insertCourse(CourseEntity(it.id, it.semesterId, it.name, it.code, it.normalizedCode, it.type, it.colorArgb, it.retired)) }
+            backup.courses.forEach { setup.insertCourse(CourseEntity(it.id, it.semesterId, it.name, it.type, it.colorArgb, it.retired)) }
             backup.balances.forEach { setup.insertBalance(OpeningBalanceEntity(it.courseId, it.loggingStartDay, it.conducted, it.present, it.approvedDl, it.pendingDl, it.revision)) }
             setup.insertSettings(AppSettingsEntity(1, backup.settings.activeSemesterId, backup.settings.theme,
                 backup.settings.haptics, backup.settings.reminderEnabled, backup.settings.reminderMinute, backup.settings.revision))

@@ -10,6 +10,7 @@ import com.niranjan.ninety.data.SessionView
 import com.niranjan.ninety.ui.guard
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -29,9 +30,9 @@ class LeaveViewModel(private val repository: NinetyRepository, semesterId: UUID)
 
     init {
         viewModelScope.launch {
-            expandedEventId.collect { id ->
-                if (id == null) { _eventSessions.value = emptyList(); return@collect }
-                repository.observeDlEventSessions(id).collect { _eventSessions.value = it }
+            expandedEventId.collectLatest { id ->
+                _eventSessions.value = emptyList()
+                if (id != null) repository.observeDlEventSessions(id).collect { _eventSessions.value = it }
             }
         }
     }

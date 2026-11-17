@@ -15,15 +15,15 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class HistoryViewModel(private val repository: NinetyRepository, private val semesterId: UUID) : ViewModel() {
+class HistoryViewModel(private val repository: NinetyRepository, private val semesterId: UUID, today: LocalDate = LocalDate.now()) : ViewModel() {
 
-    val month = MutableStateFlow(YearMonth.now())
+    val month = MutableStateFlow(YearMonth.from(today))
     val summaries: StateFlow<List<DaySummary>> = month.flatMapLatest {
         repository.observeMonth(semesterId, it)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val incomplete: StateFlow<List<LocalDate>> = repository.observeIncompleteDates(
-        semesterId, LocalDate.now().plusDays(1))
+        semesterId, today)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun moveMonth(delta: Long) { month.value = month.value.plusMonths(delta) }

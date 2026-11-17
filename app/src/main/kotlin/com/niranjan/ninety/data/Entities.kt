@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.util.Locale
 
 @Entity(tableName = "semester")
 data class SemesterEntity(
@@ -31,11 +32,12 @@ data class CourseEntity(
     @PrimaryKey val id: String,
     val semesterId: String,
     val name: String,
-    val code: String,
-    val normalizedCode: String,
     val type: String,
     val colorArgb: Long? = null,
     val retired: Boolean = false,
+    // Schema 3 requires these columns. New records use the ID as a compatibility key.
+    @ColumnInfo(name = "code") val legacyKey: String = id,
+    @ColumnInfo(name = "normalizedCode") val normalizedLegacyKey: String = legacyKey.uppercase(Locale.ROOT),
 )
 
 @Entity(

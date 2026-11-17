@@ -55,6 +55,13 @@ data class BalanceImage(
     val revision: Long,
 )
 
+@Serializable
+data class VersionImage(val id: String, val semesterId: String, val effectiveDay: Long,
+    val createdAt: Long, val slots: List<VersionSlotImage>)
+
+@Serializable
+data class VersionSlotImage(val weekday: Int, val slot: Int, val courseId: String)
+
 /**
  * Everything needed to reverse one mutation: before-images of touched rows plus
  * identities of rows the change created. `expectedRevisions` maps each touched row
@@ -76,6 +83,7 @@ data class UndoPayload(
     val deletedDays: List<DayImage> = emptyList(),
     val deletedSessions: List<SessionImage> = emptyList(),
     val expectedRevisions: Map<String, Long> = emptyMap(),
+    val deletedVersions: List<VersionImage> = emptyList(),
 )
 
 val undoJson: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true }

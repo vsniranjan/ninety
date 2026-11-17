@@ -35,7 +35,7 @@ class ProcessPersistenceDeviceTest {
             context.deleteDatabase(name)
             val semester = Semester(UUID.fromString("f55aac53-7f22-4e70-8d7b-9ea8917cbe87"),
                 "Persistence fixture", LocalDate.of(2020, 1, 1), ZoneId.of("UTC"))
-            val course = Course(courseId, semester.id, "Persistence course", "QA1", CourseType.THEORY)
+            val course = Course(courseId, semester.id, "Persistence course", CourseType.THEORY)
             val db = NinetyDatabase.create(context, name)
             try {
                 RoomSetupRepository(db).createInitialSetup(InitialSetup(semester, course,

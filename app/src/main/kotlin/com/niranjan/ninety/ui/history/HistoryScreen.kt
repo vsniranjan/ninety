@@ -43,6 +43,10 @@ import com.niranjan.ninety.ui.designsystem.NinetyCard
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.collegeWeekdays
 import com.niranjan.ninety.ui.medium
+import com.niranjan.ninety.ui.long
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import com.niranjan.ninety.ui.ninetyViewModel
 import com.niranjan.ninety.ui.short
 import java.time.DayOfWeek
@@ -54,9 +58,9 @@ import java.util.Locale
 import java.util.UUID
 
 @Composable
-fun HistoryScreen(semesterId: UUID, onOpenDay: (LocalDate) -> Unit) {
-    val model = ninetyViewModel<HistoryViewModel>(key = "history-$semesterId") {
-        HistoryViewModel(it.repository, semesterId)
+fun HistoryScreen(semesterId: UUID, today: LocalDate = LocalDate.now(), onOpenDay: (LocalDate) -> Unit) {
+    val model = ninetyViewModel<HistoryViewModel>(key = "history-$semesterId-$today") {
+        HistoryViewModel(it.repository, semesterId, today)
     }
     val month by model.month.collectAsStateWithLifecycle()
     val days by model.summaries.collectAsStateWithLifecycle()
@@ -79,7 +83,9 @@ fun HistoryScreen(semesterId: UUID, onOpenDay: (LocalDate) -> Unit) {
                 }
             }
         }
-        item { MonthGrid(month, byDate, onOpenDay) }
+        item { MonthGrid(month, byDate, today, onOpenDay) }
+        item { Text("Dots show recorded or incomplete days. Tap a date to see its classes and status.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (incomplete.isNotEmpty()) {
             item { SectionLabel("Needs attention · ${incomplete.size} incomplete") }
             items(incomplete.take(12)) { date ->
@@ -100,7 +106,7 @@ private fun monthLabel(month: YearMonth): String =
     "${month.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${month.year}"
 
 @Composable
-private fun MonthGrid(month: YearMonth, days: Map<LocalDate, DaySummary>, onOpenDay: (LocalDate) -> Unit) {
+private fun MonthGrid(month: YearMonth, days: Map<LocalDate, DaySummary>, today: LocalDate, onOpenDay: (LocalDate) -> Unit) {
     val first = month.atDay(1)
     val lead = (first.dayOfWeek.value - DayOfWeek.MONDAY.value)
     val cells = buildList<LocalDate?> {
@@ -122,7 +128,7 @@ private fun MonthGrid(month: YearMonth, days: Map<LocalDate, DaySummary>, onOpen
                 Row(Modifier.fillMaxWidth()) {
                     week.forEach { date ->
                         Box(Modifier.weight(1f).aspectRatio(1f), contentAlignment = Alignment.Center) {
-                            if (date != null) DayCell(date, days[date], onOpenDay)
+                            if (date != null) DayCell(date, days[date], today, onOpenDay)
                         }
                     }
                     repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
@@ -133,8 +139,7 @@ private fun MonthGrid(month: YearMonth, days: Map<LocalDate, DaySummary>, onOpen
 }
 
 @Composable
-private fun DayCell(date: LocalDate, summary: DaySummary?, onOpenDay: (LocalDate) -> Unit) {
-    val today = LocalDate.now()
+private fun DayCell(date: LocalDate, summary: DaySummary?, today: LocalDate, onOpenDay: (LocalDate) -> Unit) {
     val weekend = date.dayOfWeek in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)
     val bg = when {
         summary?.holiday == true -> MaterialTheme.colorScheme.tertiaryContainer
@@ -146,12 +151,21 @@ private fun DayCell(date: LocalDate, summary: DaySummary?, onOpenDay: (LocalDate
         Modifier.size(44.dp).clip(CircleShape)
             .background(if (date == today) MaterialTheme.colorScheme.surfaceVariant else bg)
             .clickable { onOpenDay(date) }
-            .testTag("day_cell_$date"),
+            .testTag("day_cell_$date").semantics {
+                contentDescription = date.long()
+                stateDescription = when {
+                    summary?.holiday == true -> "Holiday"
+                    summary?.complete == true -> "All periods recorded"
+                    summary?.incomplete == true -> "Unrecorded periods"
+                    weekend -> "Weekend"
+                    else -> "No recorded classes"
+                }
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center) {
         Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyMedium,
             color = when {
-                weekend -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                weekend -> MaterialTheme.colorScheme.onSurfaceVariant
                 else -> MaterialTheme.colorScheme.onSurface
             })
         if (summary != null && summary.total > 0) {

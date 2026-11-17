@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,7 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.niranjan.ninety.data.DlStatus
 import com.niranjan.ninety.domain.AttendanceOutcome
@@ -105,23 +107,6 @@ fun DlStatusChip(status: DlStatus, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun CourseBadge(code: String, typeLabel: String?, modifier: Modifier = Modifier) {
-    Row(verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
-        Box(Modifier.size(10.dp).clip(CircleShape).semantics { }
-            .clip(CircleShape), contentAlignment = Alignment.Center) {
-            Surface(color = MaterialTheme.colorScheme.primary, shape = CircleShape,
-                modifier = Modifier.size(10.dp)) {}
-        }
-        Text(code, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        if (typeLabel != null) {
-            Text(typeLabel, style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
 fun AttendanceBar(credited: Long, conducted: Long, modifier: Modifier = Modifier) {
     val fraction = if (conducted <= 0) 0f else (credited.toFloat() / conducted).coerceIn(0f, 1f)
     val meets = conducted > 0 && 10 * credited >= 9 * conducted
@@ -185,6 +170,19 @@ fun FieldButton(label: String, value: String, onClick: () -> Unit, modifier: Mod
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = onClick, modifier = Modifier.padding(top = 2.dp)) {
             Text(value, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+/** Choices keep their natural label widths and wrap as whole controls at large text sizes. */
+@Composable
+fun ChoiceRow(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier) {
+    FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        options.forEach { (value, label) ->
+            FilterChip(selected = selected == value, onClick = { onSelect(value) },
+                label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
         }
     }
 }

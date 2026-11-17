@@ -23,6 +23,8 @@ import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
@@ -60,13 +62,16 @@ private fun SessionRow.toFact(): PeriodFact = PeriodFact(
     mapOutcome(outcomeKind, outcomeDlStatus), counting, cancelled || suppressed, holiday)
 
 private fun SessionRow.toView(course: CourseEntity?): SessionView = SessionView(
-    UUID.fromString(id), UUID.fromString(courseId), course?.code ?: "?",
+    UUID.fromString(id), UUID.fromString(courseId),
     course?.name ?: "Course",
     course?.let { runCatching { CourseType.valueOf(it.type) }.getOrDefault(CourseType.OTHER) } ?: CourseType.OTHER,
     course?.colorArgb, slot, SessionOrigin.valueOf(origin), counting, startMinute, endMinute,
     cancelled, pinned, suppressed, mapOutcome(outcomeKind, outcomeDlStatus),
     outcomeDlStatus?.let { DlStatus.valueOf(it) },
     outcomeDlEventId?.let { UUID.fromString(it) }, revision)
+
+private fun CourseSetup.toStoredCourse(semesterId: UUID): CourseEntity =
+    CourseEntity(courseId.toString(), semesterId.toString(), input.name.trim(), input.type.name, input.colorArgb)
 
 private fun String.toUuid(): UUID = UUID.fromString(this)
 
@@ -81,10 +86,11 @@ private class BatchBuilder(var label: String) {
     val createdEvents = mutableListOf<String>()
     val deletedDays = mutableListOf<DayImage>()
     val deletedSessions = mutableListOf<SessionImage>()
+    val deletedVersions = mutableListOf<VersionImage>()
     val expected = mutableMapOf<String, Long>()
     fun payload() = undoJson.encodeToString(UndoPayload.serializer(),
         UndoPayload(label, days, sessions, outcomes, balances, createdDays, createdSessions,
-            createdVersions, createdEvents, deletedDays, deletedSessions, expected))
+            createdVersions, createdEvents, deletedDays, deletedSessions, expected, deletedVersions))
 }
 
 class RoomNinetyRepository(
@@ -120,9 +126,7 @@ class RoomNinetyRepository(
         setup.observeCourses(semesterId.toString())
 
     private fun observeBalances(semesterId: UUID): Flow<Map<String, OpeningBalanceEntity>> =
-        setup.observeCourses(semesterId.toString()).map { courses ->
-            courses.mapNotNull { setup.balance(it.id) }.associateBy { it.courseId }
-        }
+        setup.observeBalances(semesterId.toString()).map { balances -> balances.associateBy { it.courseId } }
 
     override fun observeCourseStats(semesterId: UUID, asOf: LocalDate): Flow<List<CourseStats>> =
         combine(setup.observeSemester(semesterId.toString()),
@@ -181,7 +185,8 @@ class RoomNinetyRepository(
             val (start, end) = session?.let { it.startMinute to it.endMinute }
                 ?: times.getOrNull(slot - 1) ?: (0 to 0)
             SlotCell(slot, start, end, session,
-                projectedCourseId = if (session == null) projected[slot] else null)
+                projectedCourseId = if (session == null) projected[slot] else null,
+                projectedCourseName = if (session == null) projected[slot]?.let { courseById[it.toString()]?.name } else null)
         }
         val groups = mutableListOf<SlotGroup>()
         cells.forEach { cell ->
@@ -200,14 +205,15 @@ class RoomNinetyRepository(
             weekend = weekend,
             future = date.isAfter(today),
             writable = !date.isAfter(today),
-            groups = groups, extras = extras)
+            groups = if (weekend && day?.copiedWeekday == null && bySlot.isEmpty()) emptyList() else groups,
+            extras = extras)
     }
 
     private fun groupVersions(semesterId: UUID, rows: List<TemplateRow>): List<ScheduleVersion> {
         return rows.groupBy { it.effectiveDay }.entries.sortedBy { it.key }.map { (effectiveDay, slots) ->
-            val template = WeekTemplate(slots.groupBy({ DayOfWeek.of(it.weekday) },
-                { it.slot to it.courseId.toUuid() }).mapValues { (_, pairs) -> pairs.toMap() })
-            ScheduleVersion(dayUuid(semesterId.toString(), effectiveDay), semesterId,
+            val template = WeekTemplate(slots.filter { it.weekday != null && it.slot != null && it.courseId != null }
+                .groupBy({ DayOfWeek.of(it.weekday!!) }, { it.slot!! to it.courseId!!.toUuid() }).mapValues { (_, pairs) -> pairs.toMap() })
+            ScheduleVersion(slots.first().versionId.toUuid(), semesterId,
                 LocalDate.ofEpochDay(effectiveDay), template)
         }
     }
@@ -257,14 +263,14 @@ class RoomNinetyRepository(
                 DlEventView(row.id.toUuid(), row.title, row.createdAt, status,
                     row.periods, row.pending, row.approved, row.rejected, row.dates,
                     attached.map { LocalDate.ofEpochDay(it.day) }.distinct().sorted(),
-                    attached.mapNotNull { courses.firstOrNull { c -> c.id == it.courseId }?.code }.distinct().sorted())
+                    attached.mapNotNull { courses.firstOrNull { c -> c.id == it.courseId }?.name }.distinct().sorted())
             }
         }
 
     override fun observeDlEventSessions(eventId: UUID): Flow<List<SessionView>> =
         combine(journal.observeSessionsForEvent(eventId.toString()),
             setup.observeSemesters()) { rows, semesters ->
-            val courses = semesters.flatMap { setup.activeCourses(it.id) }.associateBy { it.id }
+            val courses = semesters.flatMap { setup.courses(it.id) }.associateBy { it.id }
             rows.map { it.toView(courses[it.courseId]) }
         }
 
@@ -374,7 +380,7 @@ class RoomNinetyRepository(
                     val s = journal.session(op.sessionId.toString()) ?: return@forEach
                     if (conflicts != null) {
                         conflicts += ConflictInfo(s.id.toUuid(), date, s.slot,
-                            setup.course(s.courseId)?.code ?: "?", op.expected.courseId,
+                            setup.course(s.courseId)?.name ?: "?", op.expected.courseId,
                             if (s.cancelled) "Marked not conducted" else "Already recorded")
                     }
                 }
@@ -400,11 +406,11 @@ class RoomNinetyRepository(
         require(setupData.courses.isNotEmpty()) { "Add at least one course." }
         val zone = ZoneId.of(setupData.zoneId)
         val today = today(zone)
-        val codes = setupData.courses.map { it.input.code.trim().uppercase(Locale.ROOT) }
-        require(codes.distinct().size == codes.size) { "Course codes must be unique." }
+        val names = setupData.courses.map { it.input.name.trim().lowercase(Locale.ROOT) }
+        require(names.distinct().size == names.size) { "Course names must be unique within a semester." }
         val start = setupData.startDate
         setupData.courses.forEach { cs ->
-            require(cs.input.name.isNotBlank() && cs.input.code.isNotBlank()) { "Each course needs a name and code." }
+            require(cs.input.name.isNotBlank()) { "Enter a course name." }
             val b = cs.balance
             if (b != null) {
                 require(b.courseId == cs.courseId) { "Invalid course ownership." }
@@ -423,9 +429,7 @@ class RoomNinetyRepository(
             setup.insertSemester(SemesterEntity(semesterId.toString(), setupData.name.trim(),
                 start.toEpochDay(), zone.id))
             setupData.courses.forEach { cs ->
-                setup.insertCourse(CourseEntity(cs.courseId.toString(), semesterId.toString(),
-                    cs.input.name.trim(), cs.input.code.trim(), cs.input.code.trim().uppercase(Locale.ROOT),
-                    cs.input.type.name, cs.input.colorArgb))
+                setup.insertCourse(cs.toStoredCourse(semesterId))
                 val b = cs.balance ?: OpeningBalance(cs.courseId, start)
                 setup.insertBalance(OpeningBalanceEntity(cs.courseId.toString(),
                     b.loggingStartDate.toEpochDay(), b.conducted, b.present, b.approvedDl, b.pendingDl))
@@ -490,18 +494,18 @@ class RoomNinetyRepository(
     override suspend fun addCourse(semesterId: UUID, courseSetup: CourseSetup) {
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
         val start = LocalDate.ofEpochDay(semester.startDay)
-        require(courseSetup.input.name.isNotBlank() && courseSetup.input.code.isNotBlank()) {
-            "Each course needs a name and code." }
+        val name = courseSetup.input.name.trim()
+        require(name.isNotEmpty()) { "Enter a course name." }
         courseSetup.balance?.let { b ->
             require(!b.loggingStartDate.isBefore(start)) { "First logging date cannot precede the semester start." }
             require(b.conducted == 0L || b.loggingStartDate.isAfter(start)) {
                 "Opening attendance needs historical dates before the first logging date." }
         }
         database.withTransaction {
-            setup.insertCourse(CourseEntity(courseSetup.courseId.toString(), semesterId.toString(),
-                courseSetup.input.name.trim(), courseSetup.input.code.trim(),
-                courseSetup.input.code.trim().uppercase(Locale.ROOT), courseSetup.input.type.name,
-                courseSetup.input.colorArgb))
+            require(setup.courses(semester.id).none { it.name.equals(name, ignoreCase = true) }) {
+                "Course names must be unique within a semester."
+            }
+            setup.insertCourse(courseSetup.toStoredCourse(semesterId))
             val b = courseSetup.balance ?: OpeningBalance(courseSetup.courseId, start)
             setup.insertBalance(OpeningBalanceEntity(courseSetup.courseId.toString(),
                 b.loggingStartDate.toEpochDay(), b.conducted, b.present, b.approvedDl, b.pendingDl))
@@ -509,13 +513,44 @@ class RoomNinetyRepository(
     }
 
     override suspend fun updateCourse(courseId: UUID, input: CourseInput) {
-        require(input.name.isNotBlank() && input.code.isNotBlank()) { "Each course needs a name and code." }
-        check(setup.updateCourse(courseId.toString(), input.name.trim(), input.code.trim(),
-            input.code.trim().uppercase(Locale.ROOT), input.type.name, input.colorArgb) == 1) { "Unknown course." }
+        val id = courseId.toString()
+        val name = input.name.trim()
+        require(name.isNotEmpty()) { "Enter a course name." }
+        database.withTransaction {
+            val current = setup.course(id) ?: throw IllegalArgumentException("Unknown course.")
+            if (!current.name.equals(name, ignoreCase = true)) {
+                require(setup.courses(current.semesterId).none { it.id != id && it.name.equals(name, ignoreCase = true) }) {
+                    "Course names must be unique within a semester."
+                }
+            }
+            check(setup.updateCourse(id, name, input.type.name, input.colorArgb) == 1) { "Unknown course." }
+        }
     }
 
     override suspend fun retireCourse(courseId: UUID) {
-        check(setup.retireCourse(courseId.toString()) == 1) { "Unknown course." }
+        val course = setup.course(courseId.toString()) ?: throw IllegalArgumentException("Unknown course.")
+        val semester = setup.semester(course.semesterId) ?: throw IllegalArgumentException("Unknown semester.")
+        database.withTransaction {
+            val effective = today(zoneOf(semester)).plusDays(1)
+            val versions = loadVersions(semester.id)
+            versions.filter { !it.effectiveFrom.isBefore(effective) }.forEach { version ->
+                schedule.slots(version.id.toString()).filter { it.courseId == course.id }.forEach { slot ->
+                    schedule.deleteSlot(version.id.toString(), slot.weekday, slot.slot)
+                }
+            }
+            val active = ScheduleResolver.effectiveVersion(versions, effective)
+            if (active != null && active.effectiveFrom.isBefore(effective)) {
+                val clean = WeekTemplate(active.template.assignments.mapValues { (_, slots) ->
+                    slots.filterValues { it != courseId }
+                })
+                val id = UUID.randomUUID().toString()
+                schedule.insertVersion(ScheduleVersionEntity(id, semester.id, effective.toEpochDay(), now()))
+                schedule.insertSlots(clean.assignments.flatMap { (weekday, slots) ->
+                    slots.map { (slot, owner) -> TemplateSlotEntity(id, weekday.value, slot, owner.toString()) }
+                })
+            }
+            check(setup.retireCourse(courseId.toString()) == 1)
+        }
     }
 
     override suspend fun correctOpeningBalance(balance: OpeningBalance) {
@@ -579,7 +614,12 @@ class RoomNinetyRepository(
         val conflicts = mutableListOf<ConflictInfo>()
         database.withTransaction {
             val batch = BatchBuilder("Timetable updated")
-            schedule.versionAt(semester.id, effectiveFrom.toEpochDay())?.let { schedule.deleteVersion(it.id) }
+            schedule.versionAt(semester.id, effectiveFrom.toEpochDay())?.let { previous ->
+                batch.deletedVersions += VersionImage(previous.id, previous.semesterId,
+                    previous.effectiveDay, previous.createdAt,
+                    schedule.slots(previous.id).map { VersionSlotImage(it.weekday, it.slot, it.courseId) })
+                schedule.deleteVersion(previous.id)
+            }
             val versionId = UUID.randomUUID().toString()
             schedule.insertVersion(ScheduleVersionEntity(versionId, semester.id, effectiveFrom.toEpochDay(), now()))
             schedule.insertSlots(template.assignments.flatMap { (weekday, slots) ->
@@ -623,7 +663,7 @@ class RoomNinetyRepository(
                     if (op is ReconcileOp.Conflict) {
                         val s = existing.first { it.id == op.sessionId.toString() }
                         conflicts += ConflictInfo(op.sessionId, date, s.slot,
-                            setup.course(s.courseId)?.code ?: "?", op.expected.courseId,
+                            setup.course(s.courseId)?.name ?: "?", op.expected.courseId,
                             if (s.cancelled) "Marked not conducted" else "Already recorded")
                     }
                 }
@@ -696,7 +736,8 @@ class RoomNinetyRepository(
         database.withTransaction {
             val batch = BatchBuilder(if (outcome == AttendanceOutcome.PRESENT) "Marked present" else "Marked absent")
             sessionIds.distinct().forEach { id ->
-                requireWritableSession(id, today)
+                val session = requireWritableSession(id, today)
+                require(session.semesterId == semesterId) { "Group periods must belong to the same semester." }
                 batchOutcomeImage(batch, id.toString())
                 if (journal.outcome(id.toString()) == null) {
                     journal.insertOutcome(AttendanceOutcomeEntity(id.toString(), outcome.name))
@@ -718,10 +759,10 @@ class RoomNinetyRepository(
                 ?: throw IllegalArgumentException("No classes scheduled for this date.")
             require(!day.holiday) { "This day is marked as a holiday." }
             val eligible = journal.sessionsForDay(day.id).filter { s ->
-                s.origin != SessionOrigin.EXTRA.name && s.counting && !s.cancelled && !s.suppressed &&
+                s.counting && !s.cancelled && !s.suppressed &&
                     journal.outcome(s.id) == null
             }
-            batch.label = "Marked ${eligible.size} periods present"
+            batch.label = "Marked ${eligible.size} ${if (eligible.size == 1) "period" else "periods"} present"
             eligible.forEach { s ->
                 batch.outcomes += missingOutcomeImage(s.id)
                 journal.insertOutcome(AttendanceOutcomeEntity(s.id, "PRESENT"))
@@ -789,37 +830,45 @@ class RoomNinetyRepository(
             val bySlot = existing.filter { it.slot != null }.associateBy { it.slot!! }
             val conflicts = mutableListOf<ConflictInfo>()
             var created = 0
+            val expectedSlots = expected.map { it.slot }.toSet()
+            bySlot.values.filter { it.slot !in expectedSlots }.forEach { current ->
+                if (current.cancelled || current.pinned || journal.outcome(current.id) != null) {
+                    conflicts += ConflictInfo(current.id.toUuid(), date, current.slot,
+                        setup.course(current.courseId)?.name ?: "?", current.courseId.toUuid(), "Existing period kept")
+                } else {
+                    batch.deletedSessions += current.image(false)
+                    journal.deleteSession(current.id)
+                }
+            }
             expected.forEach { slot ->
                 val current = bySlot[slot.slot]
+                val same = current != null && current.courseId == slot.courseId.toString() &&
+                    current.startMinute == slot.startMinute && current.endMinute == slot.endMinute &&
+                    current.counting && !current.suppressed && !current.cancelled
                 when {
                     current == null -> {
                         val id = stableUuid("copied", semester.id, date.toEpochDay(), slot.slot).toString()
                         journal.insertSession(SessionEntity(id, day.id, semester.id, slot.courseId.toString(),
-                            slot.slot, SessionOrigin.COPIED.name, counting = true,
-                            slot.startMinute, slot.endMinute))
+                            slot.slot, SessionOrigin.COPIED.name, counting = true, slot.startMinute, slot.endMinute))
                         batch.createdSessions += id
                         created++
                     }
+                    same && (current.origin == SessionOrigin.COPIED.name || journal.outcome(current.id) != null) -> Unit
                     current.cancelled || current.pinned || journal.outcome(current.id) != null ->
                         conflicts += ConflictInfo(current.id.toUuid(), date, current.slot,
-                            setup.course(current.courseId)?.code ?: "?", slot.courseId, "Already recorded")
-                    current.courseId != slot.courseId.toString() || current.origin != SessionOrigin.COPIED.name ||
-                        current.startMinute != slot.startMinute || current.endMinute != slot.endMinute || !current.counting -> {
-                        batch.sessions += current.image(journal.outcome(current.id) != null)
+                            setup.course(current.courseId)?.name ?: "?", slot.courseId, "Already recorded or edited")
+                    else -> {
+                        batch.sessions += current.image(false)
                         journal.adoptSession(current.id, SessionOrigin.COPIED.name, slot.courseId.toString(),
                             slot.startMinute, slot.endMinute, true)
                         created++
                     }
-                    else -> Unit // identical copy: idempotent no-op
                 }
             }
-            // An exact copy replaces the whole day; a merge around recorded periods is custom.
-            val exact = conflicts.isEmpty() && bySlot.values.all { it.suppressed }
-            val kind = if (exact) DayKind.COPIED else DayKind.CUSTOM
-            if (day.kind != kind.name || day.copiedWeekday != sourceWeekday.value) {
-                journal.updateDayKind(day.id, kind.name, sourceWeekday.value)
-            }
-            if (created > 0 || hadDay == null) recordBatch("copy", batch)
+            val kind = if (conflicts.isEmpty()) DayKind.COPIED else DayKind.CUSTOM
+            val dayChanged = day.kind != kind.name || day.copiedWeekday != sourceWeekday.value
+            if (dayChanged) journal.updateDayKind(day.id, kind.name, sourceWeekday.value)
+            if (created > 0 || hadDay == null || dayChanged || batch.deletedSessions.isNotEmpty()) recordBatch("copy", batch)
             CopyResult(created, conflicts, kind)
         }
     }
@@ -992,6 +1041,11 @@ class RoomNinetyRepository(
                 else check(journal.setHoliday(id, false) == 1)
             }
             payload.createdVersions.forEach { schedule.deleteVersion(it) }
+            payload.deletedVersions.forEach { version ->
+                schedule.insertVersion(ScheduleVersionEntity(version.id, version.semesterId,
+                    version.effectiveDay, version.createdAt))
+                schedule.insertSlots(version.slots.map { TemplateSlotEntity(version.id, it.weekday, it.slot, it.courseId) })
+            }
             payload.createdEvents.forEach { journal.deleteEvent(it) }
             payload.balances.forEach { img ->
                 check(setup.restoreBalance(img.courseId, img.loggingStartDay, img.conducted, img.present,
@@ -1004,7 +1058,7 @@ class RoomNinetyRepository(
 
     // ---------------------------------------------------------------- backup
 
-    override suspend fun exportBackup(): ByteArray = BackupCodec.export(database, clock)
-    override suspend fun validateBackup(bytes: ByteArray): BackupPreview = BackupCodec.validate(bytes)
-    override suspend fun restoreBackup(bytes: ByteArray) = BackupCodec.restore(database, bytes, clock)
+    override suspend fun exportBackup(): ByteArray = withContext(Dispatchers.IO) { BackupCodec.export(database, clock) }
+    override suspend fun validateBackup(bytes: ByteArray): BackupPreview = withContext(Dispatchers.IO) { BackupCodec.validate(bytes) }
+    override suspend fun restoreBackup(bytes: ByteArray) = withContext(Dispatchers.IO) { BackupCodec.restore(database, bytes, clock) }
 }

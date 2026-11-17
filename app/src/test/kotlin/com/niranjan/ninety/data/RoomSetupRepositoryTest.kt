@@ -43,7 +43,7 @@ class RoomSetupRepositoryTest {
     private fun setup(): InitialSetup {
         val s = Semester(UUID.randomUUID(), "Semester 5", LocalDate.of(2026, 8, 1),
             ZoneId.of("Asia/Kolkata"))
-        val c = Course(UUID.randomUUID(), s.id, "Operating Systems", "CS301", CourseType.THEORY)
+        val c = Course(UUID.randomUUID(), s.id, "Operating Systems", CourseType.THEORY)
         return InitialSetup(s, c, OpeningBalance(c.id, LocalDate.of(2026, 11, 11), 40, 38))
     }
 
@@ -52,7 +52,7 @@ class RoomSetupRepositoryTest {
         db.close()
         db = NinetyDatabase.create(context, databaseName)
         val result = RoomSetupRepository(db, clock).overview.first().single()
-        assertEquals("CS301", result.course.code)
+        assertEquals("Operating Systems", result.course.name)
         assertEquals(40L, result.summary.conducted)
         assertEquals(38L, result.summary.credited)
         assertEquals(2L, result.summary.safeSkips)
@@ -103,17 +103,13 @@ class RoomSetupRepositoryTest {
         assertEquals(40L, RoomSetupRepository(db, clock).overview.first().single().summary.conducted)
     }
 
-    @Test fun foreignKeysUniqueCodesAndSingletonAreEnforced() = runBlocking {
+    @Test fun foreignKeysAndSingletonAreEnforced(): Unit = runBlocking {
         val initial = setup()
         RoomSetupRepository(db, clock).createInitialSetup(initial)
         val sql = db.openHelper.writableDatabase
         assertThrows(Exception::class.java) { sql.execSQL("DELETE FROM semester") }
         assertThrows(Exception::class.java) { sql.execSQL("UPDATE course SET semesterId = 'missing'") }
         assertThrows(Exception::class.java) { sql.execSQL("UPDATE app_settings SET id = 2") }
-        assertTrue(runCatching {
-            db.setupDao().insertCourse(CourseEntity(UUID.randomUUID().toString(), initial.semester.id.toString(),
-                "Duplicate code", "CS301", "CS301", "THEORY"))
-        }.isFailure)
     }
 
     @Test fun transactionFailureRollsBackAllWrites() = runBlocking {

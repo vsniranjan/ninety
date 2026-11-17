@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 data class CourseDraft(
     val id: UUID = UUID.randomUUID(),
     val name: String = "",
-    val code: String = "",
     val type: CourseType = CourseType.THEORY,
     /** ISO date when dated logging begins for this course; blank = semester start. */
     val loggingDate: String = "",
@@ -100,25 +99,24 @@ class SetupViewModel(private val repository: NinetyRepository) : ViewModel() {
     private fun validateCourses(s: SetupState): String? {
         if (s.courses.isEmpty()) return "Add at least one course."
         s.courses.forEach { c ->
-            if (c.name.isBlank()) return "Give ${c.code.ifBlank { "a course" }} a name."
-            if (c.code.isBlank()) return "Give ${c.name.ifBlank { "a course" }} a short code."
+            if (c.name.isBlank()) return "Enter a course name."
             val counts = listOf(c.conducted, c.present, c.approvedDl, c.pendingDl)
             if (counts.any { it.toLongOrNull() == null || it.toLong() < 0 }) {
-                return "Opening counts for ${c.code} must be whole numbers."
+                return "Opening counts for ${c.name} must be whole numbers."
             }
             val conducted = c.conducted.toLong()
             if (c.present.toLong() + c.approvedDl.toLong() + c.pendingDl.toLong() > conducted) {
-                return "Present and duty leave cannot exceed conducted periods for ${c.code}."
+                return "Present and duty leave cannot exceed conducted periods for ${c.name}."
             }
             if (conducted > 0) {
                 val logging = c.loggingDate.toLocalDateOrNull()
-                    ?: return "Choose the first logging date for ${c.code}."
+                    ?: return "Choose the first logging date for ${c.name}."
                 val start = s.startDate!!
-                if (logging <= start) return "Opening attendance for ${c.code} needs a logging date after the semester start."
+                if (logging <= start) return "Opening attendance for ${c.name} needs a logging date after the semester start."
             }
         }
-        val codes = s.courses.map { it.code.trim().uppercase(Locale.ROOT) }
-        if (codes.distinct().size != codes.size) return "Course codes must be unique."
+        val names = s.courses.map { it.name.trim().lowercase(Locale.ROOT) }
+        if (names.distinct().size != names.size) return "Course names must be unique within a semester."
         return null
     }
 
@@ -141,7 +139,7 @@ class SetupViewModel(private val repository: NinetyRepository) : ViewModel() {
                     } else {
                         OpeningBalance(c.id, c.loggingDate.toLocalDateOrNull() ?: s.startDate!!)
                     }
-                    CourseSetup(c.id, CourseInput(c.name, c.code, c.type), balance)
+                    CourseSetup(c.id, CourseInput(c.name, c.type), balance)
                 }
                 val timetable = WeekTemplate(s.timetable.entries.groupBy({ it.key.first },
                     { it.key.second to it.value }).mapValues { (_, p) -> p.toMap() })

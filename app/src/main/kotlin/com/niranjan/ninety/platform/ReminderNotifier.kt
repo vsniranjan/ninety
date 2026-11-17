@@ -31,13 +31,14 @@ object ReminderNotifier {
         val app = context.applicationContext as com.niranjan.ninety.NinetyApplication
         val state = repository.observeAppState().first()
         val settings = state.settings
+        if (!settings.reminderEnabled) return ListenableWorker.Result.success()
         val semester = state.activeSemester ?: return ListenableWorker.Result.success()
         val zone = java.time.ZoneId.of(semester.entity.collegeZone)
         val today = LocalDate.now(zone)
         repository.ensureDay(java.util.UUID.fromString(semester.entity.id), today)
         val day = repository.observeDay(java.util.UUID.fromString(semester.entity.id), today).first()
         if (day.unrecordedEligible <= 0 || day.holiday || day.weekend) return ListenableWorker.Result.success()
-        if (androidx.core.content.ContextCompat.checkSelfPermission(context,
+        if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,
                 android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             return ListenableWorker.Result.success()
         }

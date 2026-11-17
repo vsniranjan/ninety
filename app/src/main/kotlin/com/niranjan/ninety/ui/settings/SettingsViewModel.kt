@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     private val repository = container.repository
@@ -54,7 +56,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             busy.value = true
             runCatching {
                 val bytes = repository.exportBackup()
-                writeBytes(bytes) ?: throw IllegalArgumentException("The backup file could not be written.")
+                withContext(Dispatchers.IO) { writeBytes(bytes) } ?: throw IllegalArgumentException("The backup file could not be written.")
             }.onSuccess(onWritten)
                 .onFailure { messages.value = it.userMessage() }
             busy.value = false
@@ -75,7 +77,10 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         val pending = pendingRestore.value ?: return
         viewModelScope.launch {
             busy.value = true
-            runCatching { repository.restoreBackup(pending.first) }
+            runCatching {
+                repository.restoreBackup(pending.first)
+                container.reminders.reconcile()
+            }
                 .onSuccess { info.value = "Backup restored." }
                 .onFailure { messages.value = it.userMessage() }
             pendingRestore.value = null

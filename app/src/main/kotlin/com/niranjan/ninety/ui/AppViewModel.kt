@@ -59,6 +59,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         state.semesters.firstOrNull { it.entity.id == viewed?.toString() } ?: state.activeSemester
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val sessionStartedAt = container.clock.millis()
     val undoable: StateFlow<UndoableAction?> = repository.observeUndoable()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val undoBusy = MutableStateFlow(false)
@@ -76,6 +77,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun viewSemester(id: UUID?) { viewedSemesterId.value = id }
+
+    fun refreshDays() {
+        viewModelScope.launch {
+            appState.value.activeSemesterId?.let { id ->
+                messages.guard { repository.ensureMaterialized(id) }
+            }
+        }
+    }
 
     companion object {
         fun factory(container: AppContainer) = viewModelFactory {

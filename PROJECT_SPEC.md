@@ -69,7 +69,7 @@ Friday's P5/P6 times are consistent with the stated 14:00–16:00 block. The reg
 
 - Create a semester with a name and start date. Do not ask for, store, or use a planned semester end date. The semester stays active until the user explicitly marks it done; completion is a state, not a calculated date boundary.
 - Marking a semester done preserves all attendance and allows browsing its records. Permit reopening it to correct an accidental completion. No schedule or calculation may depend on a semester end date.
-- Create/edit courses with full name, short code, and optional color; distinguish **lab** courses from theory/other courses for grouping/presentation, while calculating every course independently.
+- Create/edit courses using a name and optional color. Do not require or display a separate short name or course code. Keep names unique for new or renamed courses within the same semester; distinguish **lab** courses from theory/other courses for grouping/presentation, while calculating every course independently.
 - One active semester at a time; archive and browse earlier semesters without losing data.
 - Provide thoughtful first-run onboarding that creates a semester, courses, and weekly timetable quickly.
 - Support **starting midway through a semester**: for each course, enter opening cumulative counts for **conducted**, **physically attended**, **approved DL**, and **pending DL** periods. These represent historical attendance before the user began logging dated periods.
