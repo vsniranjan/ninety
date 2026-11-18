@@ -8,9 +8,16 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import com.niranjan.ninety.R
 
 // Explicit palettes: wallpaper-derived dynamic colors must never override this direction.
 // outline is for interactive boundaries (>=3:1); outlineVariant is the quiet divider.
@@ -67,13 +74,40 @@ internal val DarkColors = darkColorScheme(
     errorContainer = Color(0xFF44211F), onErrorContainer = Color(0xFFFFDAD6),
 )
 
-private val BaseTypography = Typography()
-private val NinetyTypography = BaseTypography.copy(
-    displayLarge = BaseTypography.displayLarge.copy(fontSize = 48.sp, lineHeight = 56.sp),
-    headlineSmall = BaseTypography.headlineSmall.copy(fontSize = 24.sp, lineHeight = 32.sp),
-    titleLarge = BaseTypography.titleLarge.copy(fontSize = 20.sp, lineHeight = 28.sp),
-    bodySmall = BaseTypography.bodySmall.copy(fontSize = 13.sp, lineHeight = 20.sp),
+private val NinetyFont = FontFamily(
+    Font(R.font.manrope_regular, FontWeight.Normal),
+    Font(R.font.manrope_medium, FontWeight.Medium),
+    Font(R.font.manrope_semibold, FontWeight.SemiBold),
+    Font(R.font.manrope_bold, FontWeight.Bold),
 )
+private fun type(size: Int, line: Int, weight: FontWeight = FontWeight.Normal,
+    tracking: Float = 0f) = TextStyle(fontFamily = NinetyFont, fontSize = size.sp,
+    lineHeight = line.sp, fontWeight = weight, letterSpacing = tracking.sp,
+    fontFeatureSettings = "tnum")
+private val NinetyTypography = Typography(
+    displayLarge = type(44, 52, FontWeight.Bold, -1f),
+    displayMedium = type(38, 46, FontWeight.Bold, -0.8f),
+    displaySmall = type(32, 40, FontWeight.Bold, -0.6f),
+    headlineLarge = type(32, 40, FontWeight.Bold, -0.6f),
+    headlineMedium = type(28, 36, FontWeight.Bold, -0.5f),
+    headlineSmall = type(23, 30, FontWeight.SemiBold, -0.3f),
+    titleLarge = type(20, 28, FontWeight.SemiBold, -0.2f),
+    titleMedium = type(16, 24, FontWeight.SemiBold),
+    titleSmall = type(14, 20, FontWeight.SemiBold),
+    bodyLarge = type(16, 24), bodyMedium = type(14, 22), bodySmall = type(12, 18),
+    labelLarge = type(14, 20, FontWeight.SemiBold),
+    labelMedium = type(12, 18, FontWeight.Medium),
+    labelSmall = type(11, 16, FontWeight.Medium),
+)
+
+internal data class CautionColors(val foreground: Color, val container: Color)
+
+internal val LightCaution = CautionColors(Color(0xFF8A5300), Color(0xFFFFF4DF))
+internal val DarkCaution = CautionColors(Color(0xFFFFCF86), Color(0xFF3A2A0E))
+private val LocalCautionColors = staticCompositionLocalOf { LightCaution }
+
+internal val MaterialTheme.caution: CautionColors
+    @Composable get() = LocalCautionColors.current
 
 @Composable
 fun NinetyTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
@@ -81,7 +115,9 @@ fun NinetyTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -
         colorScheme = if (dark) DarkColors else LightColors,
         typography = NinetyTypography,
         shapes = Shapes(small = RoundedCornerShape(8.dp), medium = RoundedCornerShape(12.dp),
-            large = RoundedCornerShape(16.dp), extraLarge = RoundedCornerShape(20.dp)),
-        content = content,
+            large = RoundedCornerShape(16.dp), extraLarge = RoundedCornerShape(24.dp)),
+        content = {
+            CompositionLocalProvider(LocalCautionColors provides if (dark) DarkCaution else LightCaution, content = content)
+        },
     )
 }

@@ -1,7 +1,7 @@
 package com.niranjan.ninety
 
-import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -100,8 +100,9 @@ class AppJourneyDeviceTest {
 
         // --- Today shows the materialized day: theory row + 3-period lab card. ---
         rule.waitUntil(10_000) { exists("group_present") }
-        rule.onNodeWithText("Lab · 3 periods").assertExists()
+        rule.onNodeWithText("3 periods").assertExists()
         rule.onNodeWithText("Operating Systems", substring = true).assertExists()
+        rule.onNodeWithText("Mark all present").assertIsDisplayed()
 
         // --- One-tap lab group action credits all three underlying periods. ---
         rule.onNodeWithTag("group_present").activate()
@@ -112,19 +113,20 @@ class AppJourneyDeviceTest {
         }
 
         // --- Mark-all fills the remaining unrecorded session only. ---
+        rule.waitUntil(10_000) { rule.onAllNodesWithText("Mark remaining present").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("mark_all").performScrollTo().activate()
         await {
             val stats = repo.observeCourseStats(semesterId, today).first()
             stats.single { it.course.name == "Operating Systems" }.summary.physicallyPresent == 1L &&
                 stats.single { it.course.name == "Networks Lab" }.summary.physicallyPresent == 3L
         }
-        rule.waitUntil(10_000) {
-            rule.onAllNodesWithTag("mark_all").fetchSemanticsNodes().isEmpty()
-        }
+        rule.waitUntil(10_000) { exists("day_complete") }
+        rule.onNodeWithTag("mark_all").assertDoesNotExist()
+        rule.onNodeWithText("Networks Lab").assertExists()
 
         // --- Holiday marks the day, then snackbar Undo restores it. ---
         rule.onNodeWithTag("day_menu").activate()
-        rule.onNodeWithText("Mark as holiday").activate()
+        rule.onNodeWithText("No classes today (holiday)").activate()
         rule.onNodeWithText("Mark holiday").activate()
         await { repo.observeDay(semesterId, today).first().holiday }
         rule.waitUntil(6_000) {
@@ -140,7 +142,7 @@ class AppJourneyDeviceTest {
         }
         val theory = rule.onNodeWithTag("period_$theoryId", useUnmergedTree = true)
         theory.performScrollTo().activate()
-        rule.onNodeWithText("Mark not conducted").activate()
+        rule.onNodeWithText("Class not held").performScrollTo().activate()
         await {
             repo.observeDay(semesterId, today).first().groups.flatMap { it.cells }
                 .any { it.session?.let { period -> period.id == theoryId && period.cancelled } == true }
@@ -153,7 +155,10 @@ class AppJourneyDeviceTest {
         }
 
         // Changing recorded lab periods to DL requires an explicit replacement decision.
+        val firstLabPeriod = repo.observeDay(semesterId, today).first().groups.single { it.grouped }.cells.first().session!!
+        rule.onNodeWithTag("group_periods_${firstLabPeriod.id}").performScrollTo().activate()
         rule.onNodeWithTag("group_leave").performScrollTo().activate()
+        rule.onNodeWithTag("dl_confirm").activate()
         rule.waitUntil(10_000) { exists("confirm_action") }
         rule.onNodeWithText("Replace recorded attendance?").assertExists()
         assertTrue(withTimeout(10_000) { repo.observeDlEvents(semesterId).first() }.isEmpty())
@@ -184,7 +189,7 @@ class AppJourneyDeviceTest {
         rule.onNodeWithTag("confirm_action").activate()
         await { repo.observeAppState().first().activeSemesterId == null }
         rule.onNodeWithTag("browse_$semesterId").performScrollTo().activate()
-        rule.waitUntil(10_000) { rule.onAllNodesWithText("Semester done").fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(10_000) { rule.onAllNodesWithText("Finished").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("tab_settings").activate()
         lifecycle.performScrollTo().activate()
         await { repo.observeAppState().first().activeSemesterId == semesterId }

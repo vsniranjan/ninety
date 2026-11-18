@@ -2,12 +2,11 @@ package com.niranjan.ninety.ui.timetable
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.niranjan.ninety.data.NinetyRepository
 import com.niranjan.ninety.data.ConflictInfo
 import com.niranjan.ninety.data.CourseEntity
+import com.niranjan.ninety.data.NinetyRepository
 import com.niranjan.ninety.domain.ScheduleVersion
 import com.niranjan.ninety.domain.WeekTemplate
-import com.niranjan.ninety.ui.guard
 import com.niranjan.ninety.ui.userMessage
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -20,8 +19,8 @@ import kotlinx.coroutines.launch
 
 class TimetableViewModel(private val repository: NinetyRepository, private val semesterId: UUID) : ViewModel() {
 
-    val versions: StateFlow<List<ScheduleVersion>> = repository.observeTemplates(semesterId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val versions: StateFlow<List<ScheduleVersion>?> = repository.observeTemplates(semesterId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val courses: StateFlow<List<CourseEntity>> = repository.observeCourses(semesterId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -31,8 +30,16 @@ class TimetableViewModel(private val repository: NinetyRepository, private val s
     val messages = MutableStateFlow<String?>(null)
     val saving = MutableStateFlow(false)
 
+    private var originalTemplate: WeekTemplate? = null
+    private var originalEffectiveDate: LocalDate? = null
+
+    fun hasChanges(): Boolean = draft.value != null &&
+        (draft.value != originalTemplate || effectiveFrom.value != originalEffectiveDate)
+
     fun startEditing(base: WeekTemplate?, today: LocalDate) {
-        draft.value = base ?: WeekTemplate()
+        originalTemplate = base ?: WeekTemplate()
+        originalEffectiveDate = today
+        draft.value = originalTemplate
         effectiveFrom.value = today
     }
 
@@ -46,8 +53,9 @@ class TimetableViewModel(private val repository: NinetyRepository, private val s
 
     fun save(onSaved: (List<ConflictInfo>) -> Unit) {
         val template = draft.value ?: return
+        if (saving.value) return
+        saving.value = true
         viewModelScope.launch {
-            saving.value = true
             runCatching { repository.saveTemplate(semesterId, template, effectiveFrom.value) }
                 .onSuccess { conflicts ->
                     draft.value = null

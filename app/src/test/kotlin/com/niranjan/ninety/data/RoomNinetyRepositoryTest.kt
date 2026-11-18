@@ -217,8 +217,10 @@ class RoomNinetyRepositoryTest {
     fun `cancelled period leaves the conducted total`() = runTest {
         seedSemester()
         val lab = sessionsOf(today).filter { it.courseId == labId }
-        repository.recordAll(lab.map { it.id }, AttendanceOutcome.PRESENT)
+        repository.recordPeriod(lab[0].id, AttendanceOutcome.ABSENT)
+        repository.recordUnrecorded(lab.map { it.id }, AttendanceOutcome.PRESENT)
         assertEquals(3, stats(labId).summary.conducted)
+        assertEquals(2, stats(labId).summary.credited)
         repository.setCancelled(lab[0].id, true)
         stats(labId).let {
             assertEquals(2, it.summary.conducted)
@@ -226,6 +228,7 @@ class RoomNinetyRepositoryTest {
         }
         repository.setCancelled(lab[0].id, false)
         assertEquals(3, stats(labId).summary.conducted)
+        assertEquals(2, stats(labId).summary.credited)
     }
 
     @Test

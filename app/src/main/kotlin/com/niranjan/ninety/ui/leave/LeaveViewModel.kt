@@ -9,17 +9,40 @@ import com.niranjan.ninety.data.DlStatus
 import com.niranjan.ninety.data.SessionView
 import com.niranjan.ninety.ui.guard
 import java.util.UUID
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class LeaveViewModel(private val repository: NinetyRepository, semesterId: UUID) : ViewModel() {
+@OptIn(ExperimentalCoroutinesApi::class)
+class LeaveViewModel(private val repository: NinetyRepository, semesterId: UUID, pendingCourseId: UUID? = null) : ViewModel() {
 
-    val events: StateFlow<List<DlEventView>> = repository.observeDlEvents(semesterId)
+    private val allEvents = repository.observeDlEvents(semesterId)
+    private val visibleEvents = if (pendingCourseId == null) allEvents else allEvents.flatMapLatest { events ->
+        val pending = events.filter { it.pending > 0 }
+        if (pending.isEmpty()) {
+            flowOf(emptyList())
+        } else {
+            combine(pending.map { event ->
+                repository.observeDlEventSessions(event.id).map { sessions ->
+                    event.takeIf {
+                        sessions.any { it.courseId == pendingCourseId && it.dlStatus == DlStatus.PENDING }
+                    }
+                }
+            }) { it.filterNotNull() }
+        }
+    }
+    val events: StateFlow<List<DlEventView>> = visibleEvents
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val pendingCourseName = if (pendingCourseId == null) flowOf(null) else repository.observeCourses(semesterId)
+        .map { courses -> courses.firstOrNull { it.id == pendingCourseId.toString() }?.name }
     val stats: StateFlow<DlStats?> = repository.observeDlStats(semesterId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 

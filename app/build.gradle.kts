@@ -13,9 +13,10 @@ android {
         applicationId = "com.niranjan.ninety"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.0.2"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 5
+        versionName = "1.0.3"
+        testInstrumentationRunner = if (providers.gradleProperty("ninety.visualReview").orNull == "true")
+            "com.niranjan.ninety.RedesignTestRunner" else "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
     compileOptions {

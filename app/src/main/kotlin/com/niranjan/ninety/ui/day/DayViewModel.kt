@@ -24,11 +24,13 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class DayViewModel(private val repository: NinetyRepository, private val semesterId: UUID, initialDate: LocalDate) : ViewModel() {
 
-    val date = MutableStateFlow(initialDate)
+    private val date = MutableStateFlow(initialDate)
     val day: StateFlow<DayView?> = date.flatMapLatest {
         runCatching { repository.ensureDay(semesterId, it) }
         repository.observeDay(semesterId, it)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun observeEarlierIncomplete(today: LocalDate) = repository.observeIncompleteDates(semesterId, today)
 
     val courses: StateFlow<List<CourseEntity>> = repository.observeCourses(semesterId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -42,8 +44,8 @@ class DayViewModel(private val repository: NinetyRepository, private val semeste
         repository.recordPeriod(sessionId, outcome)
     }
 
-    fun recordAll(sessionIds: List<UUID>, outcome: AttendanceOutcome) = act {
-        repository.recordAll(sessionIds, outcome)
+    fun recordUnrecorded(sessionIds: List<UUID>, outcome: AttendanceOutcome) = act {
+        repository.recordUnrecorded(sessionIds, outcome)
     }
 
     fun markAllPresent() = act {

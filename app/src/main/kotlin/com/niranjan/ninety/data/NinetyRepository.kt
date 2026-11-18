@@ -218,7 +218,7 @@ interface NinetyRepository {
     suspend fun previewTemplateConflicts(semesterId: UUID, template: WeekTemplate, effectiveFrom: LocalDate): List<ConflictInfo>
 
     suspend fun recordPeriod(sessionId: UUID, outcome: AttendanceOutcome?)
-    suspend fun recordAll(sessionIds: List<UUID>, outcome: AttendanceOutcome)
+    suspend fun recordUnrecorded(sessionIds: List<UUID>, outcome: AttendanceOutcome)
     suspend fun markAllPresent(semesterId: UUID, date: LocalDate): Int
     suspend fun setCancelled(sessionId: UUID, cancelled: Boolean)
     suspend fun setHoliday(semesterId: UUID, date: LocalDate, holiday: Boolean)

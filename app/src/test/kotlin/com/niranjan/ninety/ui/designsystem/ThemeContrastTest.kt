@@ -8,12 +8,16 @@ import org.junit.Test
 
 /** Pairs used by enabled fields, buttons, chips, dialogs, feedback and page text. */
 class ThemeContrastTest {
-    @Test fun lightComponentContrast() = verify(LightColors)
-    @Test fun darkComponentContrast() = verify(DarkColors)
+    @Test fun lightComponentContrast() = verify(LightColors, LightCaution)
+    @Test fun darkComponentContrast() = verify(DarkColors, DarkCaution)
 
-    private fun verify(colors: ColorScheme) {
+    private fun verify(colors: ColorScheme, caution: CautionColors) {
         with(colors) {
             listOf(
+                "caution on page" to (caution.foreground to background),
+                "caution on surface" to (caution.foreground to surface),
+                "pending leave chip" to (caution.foreground to caution.container),
+                "holiday date" to (onSurfaceVariant to tertiaryContainer),
                 "page text" to (onBackground to background),
                 "page secondary text" to (onSurfaceVariant to background),
                 "field/dialog text" to (onSurface to surface),

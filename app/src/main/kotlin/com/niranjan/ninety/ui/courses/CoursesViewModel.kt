@@ -2,10 +2,10 @@ package com.niranjan.ninety.ui.courses
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.niranjan.ninety.data.NinetyRepository
 import com.niranjan.ninety.data.CourseInput
 import com.niranjan.ninety.data.CourseSetup
 import com.niranjan.ninety.data.CourseStats
+import com.niranjan.ninety.data.NinetyRepository
 import com.niranjan.ninety.data.SemesterEntity
 import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.ui.guard
@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,6 +35,9 @@ class CoursesViewModel(private val repository: NinetyRepository, private val sem
     val stats: StateFlow<List<CourseStats>?> = today.flatMapLatest { date ->
         repository.observeCourseStats(semesterId, date)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val templates = repository.observeTemplates(semesterId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val messages = MutableStateFlow<String?>(null)
 

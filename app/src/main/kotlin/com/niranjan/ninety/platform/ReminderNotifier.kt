@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.work.ListenableWorker
+import com.niranjan.ninety.R
 import com.niranjan.ninety.data.NinetyRepository
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -43,9 +44,9 @@ object ReminderNotifier {
             return ListenableWorker.Result.success()
         }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Attendance reminders",
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, context.getString(R.string.reminder_channel),
             NotificationManager.IMPORTANCE_DEFAULT).apply {
-            description = "Approximate end-of-day reminders to record attendance."
+            description = context.getString(R.string.reminder_channel_description)
         })
         val intent = android.app.PendingIntent.getActivity(context, 0,
             android.content.Intent(context, com.niranjan.ninety.MainActivity::class.java)
@@ -53,8 +54,9 @@ object ReminderNotifier {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
         val notification = androidx.core.app.NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(com.niranjan.ninety.R.drawable.ic_ninety)
-            .setContentTitle("Record today's attendance")
-            .setContentText("${day.unrecordedEligible} ${if (day.unrecordedEligible == 1) "period" else "periods"} still unrecorded.")
+            .setContentTitle(context.getString(R.string.record_today_reminder))
+            .setContentText(context.resources.getQuantityString(R.plurals.reminder_periods_not_marked,
+                day.unrecordedEligible, day.unrecordedEligible))
             .setContentIntent(intent).setAutoCancel(true)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
             .build()

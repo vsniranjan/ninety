@@ -8,12 +8,11 @@ import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.ui.guard
 import com.niranjan.ninety.ui.userMessage
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class SettingsViewModel(private val container: AppContainer) : ViewModel() {
@@ -51,13 +50,13 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         repository.setActiveSemester(UUID.fromString(info.entity.id))
     }
 
-    fun exportBackup(onWritten: (String) -> Unit, writeBytes: suspend (ByteArray) -> String?) {
+    fun exportBackup(onWritten: () -> Unit, writeBytes: suspend (ByteArray) -> Unit) {
         viewModelScope.launch {
             busy.value = true
             runCatching {
                 val bytes = repository.exportBackup()
-                withContext(Dispatchers.IO) { writeBytes(bytes) } ?: throw IllegalArgumentException("The backup file could not be written.")
-            }.onSuccess(onWritten)
+                withContext(Dispatchers.IO) { writeBytes(bytes) }
+            }.onSuccess { onWritten() }
                 .onFailure { messages.value = it.userMessage() }
             busy.value = false
         }

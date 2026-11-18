@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -61,6 +62,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     val sessionStartedAt = container.clock.millis()
     val undoable: StateFlow<UndoableAction?> = repository.observeUndoable()
+        // Single marks and lab batches share a kind in the existing journal.
+        .filter { it?.kind != "record" || it.label != "Attendance updated" }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val undoBusy = MutableStateFlow(false)
     val messages = MutableStateFlow<String?>(null)
@@ -92,12 +95,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun undo() {
-        val action = undoable.value ?: return
+    fun undo(batchId: UUID) {
         viewModelScope.launch {
             undoBusy.value = true
             messages.guard {
-                when (repository.undo(action.batchId)) {
+                when (repository.undo(batchId)) {
                     UndoResult.DONE -> Unit
                     UndoResult.STALE -> messages.value = "That change can no longer be undone."
                     UndoResult.NOT_FOUND -> messages.value = "Nothing left to undo."

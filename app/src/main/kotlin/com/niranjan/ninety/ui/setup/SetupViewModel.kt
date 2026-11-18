@@ -2,13 +2,14 @@ package com.niranjan.ninety.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.niranjan.ninety.data.NinetyRepository
 import com.niranjan.ninety.data.CourseInput
 import com.niranjan.ninety.data.CourseSetup
+import com.niranjan.ninety.data.NinetyRepository
 import com.niranjan.ninety.data.SemesterSetup
 import com.niranjan.ninety.domain.CourseType
 import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.domain.WeekTemplate
+import com.niranjan.ninety.ui.openingCountError
 import com.niranjan.ninety.ui.userMessage
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -100,19 +101,15 @@ class SetupViewModel(private val repository: NinetyRepository) : ViewModel() {
         if (s.courses.isEmpty()) return "Add at least one course."
         s.courses.forEach { c ->
             if (c.name.isBlank()) return "Enter a course name."
-            val counts = listOf(c.conducted, c.present, c.approvedDl, c.pendingDl)
-            if (counts.any { it.toLongOrNull() == null || it.toLong() < 0 }) {
-                return "Opening counts for ${c.name} must be whole numbers."
+            if (openingCountError(c.conducted.toLongOrNull(), c.present.toLongOrNull(),
+                    c.approvedDl.toLongOrNull(), c.pendingDl.toLongOrNull()) != null) {
+                return "Check the counts for ${c.name}."
             }
-            val conducted = c.conducted.toLong()
-            if (c.present.toLong() + c.approvedDl.toLong() + c.pendingDl.toLong() > conducted) {
-                return "Present and duty leave cannot exceed conducted periods for ${c.name}."
-            }
-            if (conducted > 0) {
+            if (c.hasBalance) {
                 val logging = c.loggingDate.toLocalDateOrNull()
-                    ?: return "Choose the first logging date for ${c.name}."
+                    ?: return "Choose the date tracking starts for ${c.name}."
                 val start = s.startDate!!
-                if (logging <= start) return "Opening attendance for ${c.name} needs a logging date after the semester start."
+                if (logging <= start) return "Choose a tracking start date for ${c.name} after the semester start."
             }
         }
         val names = s.courses.map { it.name.trim().lowercase(Locale.ROOT) }
@@ -130,8 +127,6 @@ class SetupViewModel(private val repository: NinetyRepository) : ViewModel() {
         viewModelScope.launch {
             _state.update { it.copy(saving = true, error = null) }
             runCatching {
-                val zone = ZoneId.of(s.zoneId)
-                val today = LocalDate.now(zone)
                 val courses = s.courses.map { c ->
                     val balance = if (c.hasBalance) {
                         OpeningBalance(c.id, c.loggingDate.toLocalDateOrNull()!!,
@@ -143,7 +138,7 @@ class SetupViewModel(private val repository: NinetyRepository) : ViewModel() {
                 }
                 val timetable = WeekTemplate(s.timetable.entries.groupBy({ it.key.first },
                     { it.key.second to it.value }).mapValues { (_, p) -> p.toMap() })
-                repository.createSemester(SemesterSetup(s.semesterName.trim(), s.startDate!!, zone.id, courses, timetable))
+                repository.createSemester(SemesterSetup(s.semesterName.trim(), s.startDate!!, s.zoneId, courses, timetable))
             }.onSuccess { _state.update { st -> st.copy(saved = true) } }
             .onFailure { _state.update { st -> st.copy(error = it.userMessage()) } }
             _state.update { it.copy(saving = false) }

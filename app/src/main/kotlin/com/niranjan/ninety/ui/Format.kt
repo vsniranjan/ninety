@@ -1,6 +1,7 @@
 package com.niranjan.ninety.ui
 
 import com.niranjan.ninety.domain.PeriodTimes
+import java.math.RoundingMode
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -11,6 +12,8 @@ fun LocalDate.long(): String =
     format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
 fun LocalDate.medium(): String =
     format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.getDefault()))
+fun LocalDate.weekdayAndDate(): String =
+    format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
 fun LocalDate.short(): String =
     format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))
 
@@ -23,8 +26,12 @@ fun collegeWeekdays(): List<DayOfWeek> = DayOfWeek.entries.take(5)
 fun timeRange(startMinute: Int, endMinute: Int): String =
     "${PeriodTimes.label(startMinute)} – ${PeriodTimes.label(endMinute)}"
 
-/** One-decimal percentage, e.g. "91.7%". Callers check conducted > 0 first. */
+/** Truncate the display to one decimal without changing the attendance decision. */
 fun percentOf(credited: Long, conducted: Long): String =
-    if (conducted == 0L) "—" else "%.1f%%".format(Locale.US, credited * 1000.0 / conducted / 10)
+    if (conducted == 0L) "—" else {
+        val percent = credited.toBigDecimal().movePointRight(2)
+            .divide(conducted.toBigDecimal(), 1, RoundingMode.DOWN)
+        "%.1f %%".format(Locale.getDefault(), percent)
+    }
 
 fun slotLabel(slot: Int?): String = slot?.let { "P$it" } ?: "Extra"

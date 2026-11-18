@@ -725,7 +725,7 @@ class RoomNinetyRepository(
         }
     }
 
-    override suspend fun recordAll(sessionIds: List<UUID>, outcome: AttendanceOutcome) {
+    override suspend fun recordUnrecorded(sessionIds: List<UUID>, outcome: AttendanceOutcome) {
         require(outcome == AttendanceOutcome.PRESENT || outcome == AttendanceOutcome.ABSENT) {
             "Use duty leave actions for duty leave outcomes." }
         if (sessionIds.isEmpty()) return
@@ -738,14 +738,11 @@ class RoomNinetyRepository(
             sessionIds.distinct().forEach { id ->
                 val session = requireWritableSession(id, today)
                 require(session.semesterId == semesterId) { "Group periods must belong to the same semester." }
-                batchOutcomeImage(batch, id.toString())
-                if (journal.outcome(id.toString()) == null) {
-                    journal.insertOutcome(AttendanceOutcomeEntity(id.toString(), outcome.name))
-                } else {
-                    journal.updateOutcome(id.toString(), outcome.name, null, null)
-                }
+                if (journal.outcome(id.toString()) != null) return@forEach
+                batch.outcomes += missingOutcomeImage(id.toString())
+                journal.insertOutcome(AttendanceOutcomeEntity(id.toString(), outcome.name))
             }
-            recordBatch("record", batch)
+            if (batch.outcomes.isNotEmpty()) recordBatch("record", batch)
         }
     }
 
