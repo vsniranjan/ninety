@@ -7,6 +7,7 @@ import com.niranjan.ninety.data.BackupPreview
 import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.ui.guard
 import com.niranjan.ninety.ui.userMessage
+import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +42,11 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     private fun haptics() = appState.value.settings.haptics
     private fun reminderOn() = appState.value.settings.reminderEnabled
     private fun reminderMinute() = appState.value.settings.reminderMinute
+
+    fun updateSemester(info: SemesterInfo, name: String, startDate: LocalDate, onSaved: () -> Unit) = act {
+        repository.updateSemester(UUID.fromString(info.entity.id), name, startDate, info.entity.collegeZone)
+        onSaved()
+    }
 
     fun completeSemester(info: SemesterInfo, completed: Boolean) = act {
         repository.setSemesterCompleted(UUID.fromString(info.entity.id), completed)

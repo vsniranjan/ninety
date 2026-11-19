@@ -60,17 +60,15 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.niranjan.ninety.R
 import com.niranjan.ninety.data.BackupCodec
-import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.ui.courses.AttendanceRulesSheet
-import com.niranjan.ninety.ui.designsystem.ActionIcon
-import com.niranjan.ninety.ui.designsystem.ConfirmDialog
+import com.niranjan.ninety.ui.designsystem.ActionRow
 import com.niranjan.ninety.ui.designsystem.NinetyCard
-import com.niranjan.ninety.ui.designsystem.ScreenHeading
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.displayMessage
 import com.niranjan.ninety.ui.ninetyViewModel
 import com.niranjan.ninety.ui.short
 import java.time.Instant
+import java.util.UUID
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -82,7 +80,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
-    onViewSemester: (java.util.UUID) -> Unit = {}, onActiveChanged: () -> Unit = {}) {
+    onOpenSemester: (UUID) -> Unit) {
     val model = ninetyViewModel<SettingsViewModel>(key = "settings") { SettingsViewModel(it) }
     val state by model.appState.collectAsStateWithLifecycle()
     val message by model.messages.collectAsStateWithLifecycle()
@@ -93,7 +91,6 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    var confirmComplete by remember { mutableStateOf<SemesterInfo?>(null) }
     var pickTime by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf(false) }
     var license by remember { mutableStateOf(false) }
@@ -139,9 +136,20 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenHeading(stringResource(R.string.settings)) {
-            ActionIcon(R.drawable.ic_info, stringResource(R.string.about_ninety), { about = true })
+        SectionLabel(stringResource(R.string.semesters), Modifier.padding(top = 8.dp))
+        state.semesters.forEach { semester ->
+            val id = UUID.fromString(semester.entity.id)
+            val started = stringResource(R.string.semester_started, semester.semester.startDate.short())
+            ActionRow(R.drawable.ic_calendar, semester.entity.name, { onOpenSemester(id) }, showChevron = true,
+                supportingText = when {
+                    semester.entity.archived -> stringResource(R.string.semester_started_finished, started)
+                    id == state.activeSemesterId -> stringResource(R.string.semester_current_started, started)
+                    else -> started
+                },
+                modifier = Modifier.testTag("open_semester_$id"))
         }
+        ActionRow(R.drawable.ic_add, stringResource(R.string.new_semester), onNewSemester,
+            modifier = Modifier.testTag("new_semester"))
 
         SectionLabel(stringResource(R.string.display_feedback))
         NinetyCard(Modifier.fillMaxWidth()) {
@@ -191,48 +199,6 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
             }
         }
 
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel(stringResource(R.string.semesters), Modifier.weight(1f))
-            ActionIcon(R.drawable.ic_add, stringResource(R.string.new_semester), onNewSemester,
-                modifier = Modifier.testTag("new_semester"), tint = MaterialTheme.colorScheme.primary)
-        }
-        state.semesters.forEach { semester ->
-            NinetyCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(semester.entity.name, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold)
-                    val started = stringResource(R.string.semester_started, LocalDate.ofEpochDay(semester.entity.startDay).short())
-                    Text(if (semester.entity.archived) stringResource(R.string.semester_started_finished, started) else started,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { onViewSemester(java.util.UUID.fromString(semester.entity.id)) },
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("browse_${semester.entity.id}")) {
-                            Text(stringResource(R.string.view))
-                        }
-                        if (state.activeSemesterId?.toString() == semester.entity.id) {
-                            Text(stringResource(R.string.current_semester), style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(vertical = 16.dp))
-                        } else if (!semester.entity.archived) {
-                            TextButton(onClick = { model.activateSemester(semester); onActiveChanged() },
-                                modifier = Modifier.heightIn(min = 48.dp)) {
-                                Text(stringResource(R.string.make_current))
-                            }
-                        }
-                        if (state.activeSemesterId?.toString() == semester.entity.id || semester.entity.archived) {
-                            TextButton(onClick = {
-                                if (!semester.entity.archived) confirmComplete = semester
-                                else { model.completeSemester(semester, false); onActiveChanged() }
-                            }, modifier = Modifier.heightIn(min = 48.dp).testTag("semester_lifecycle_${semester.entity.id}")) {
-                                Text(stringResource(if (semester.entity.archived) R.string.reopen else R.string.finish_semester))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         SectionLabel(stringResource(R.string.backup))
         NinetyCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -251,6 +217,8 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
             }
         }
 
+        ActionRow(R.drawable.ic_info, stringResource(R.string.about_ninety), { about = true },
+            showChevron = true, modifier = Modifier.testTag("open_about"))
         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Icon(painterResource(R.drawable.ic_shield), null, Modifier.size(16.dp),
@@ -264,7 +232,7 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
     var showAttendanceRules by rememberSaveable { mutableStateOf(false) }
     if (showAttendanceRules) AttendanceRulesSheet { showAttendanceRules = false }
 
-    if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text(stringResource(R.string.app_name)) },
+    if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text(stringResource(R.string.about_ninety)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.about_privacy))
@@ -282,12 +250,6 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
             text = { Text(notice, modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                 style = MaterialTheme.typography.bodySmall) },
             confirmButton = { TextButton(onClick = { license = false }) { Text(stringResource(R.string.done)) } })
-    }
-
-    confirmComplete?.let { semester ->
-        ConfirmDialog(stringResource(R.string.finish_semester_question, semester.entity.name),
-            stringResource(R.string.finish_semester_body), stringResource(R.string.finish_semester), onConfirm = { model.completeSemester(semester, true); confirmComplete = null },
-            onDismiss = { confirmComplete = null })
     }
 
     pendingRestore?.let { (_, preview) ->

@@ -97,11 +97,12 @@ import java.util.UUID
 @Composable
 fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
     snackbar: SnackbarHostState, onEditTimetable: () -> Unit, addDutyLeave: Boolean = false,
-    archived: Boolean = false) {
-    var selectedEpochDay by rememberSaveable(semesterId.toString()) { mutableStateOf(initialDate?.toEpochDay()) }
-    var catchingUp by rememberSaveable(semesterId.toString()) { mutableStateOf(false) }
+    archived: Boolean = false, semesterStart: LocalDate, resetToToday: Int = 0) {
+    var selectedEpochDay by rememberSaveable(semesterId.toString(), resetToToday) { mutableStateOf(initialDate?.toEpochDay()) }
+    var catchingUp by rememberSaveable(semesterId.toString(), resetToToday) { mutableStateOf(false) }
     var pickDate by rememberSaveable { mutableStateOf(false) }
     val date = selectedEpochDay?.let(LocalDate::ofEpochDay) ?: today
+    val beforeSemester = date < semesterStart
     val model = ninetyViewModel<DayViewModel>(key = "day-$semesterId") {
         DayViewModel(it.repository, semesterId, date)
     }
@@ -133,7 +134,7 @@ fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
     val noPeriodsForLeave = stringResource(R.string.no_periods_for_leave)
     LaunchedEffect(day, launchLeave) {
         if (day != null && launchLeave) {
-            if (day.writable && !day.holiday && day.total > 0) {
+            if (!beforeSemester && day.writable && !day.holiday && day.total > 0) {
                 dlSelection = emptySet()
             } else {
                 model.messages.value = noPeriodsForLeave
@@ -155,7 +156,7 @@ fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
         null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(Modifier.testTag("day_loading"))
         }
-        else -> key(date) { DayContent(view, date == today, busy, archived,
+        else -> key(date) { DayContent(view, date == today, busy, archived, beforeSemester,
             catchUp = {
                 val oldest = earlierIncomplete.firstOrNull { it != date }
                 if (date == today && oldest != null) {
@@ -281,7 +282,7 @@ private fun SlotGroup.countingPeriods() = cells.mapNotNull { it.session }.filter
 private fun SlotGroup.pendingPeriods() = countingPeriods().filterNot { it.recorded }
 
 @Composable
-private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: Boolean,
+private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: Boolean, beforeSemester: Boolean,
     catchUp: @Composable () -> Unit,
     nextUnmarked: (() -> Unit)?,
     onPrev: () -> Unit, onNext: () -> Unit, onToday: () -> Unit, onPickDate: () -> Unit,
@@ -299,7 +300,8 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
     val hasSchedule = day.extras.isNotEmpty() ||
         day.groups.any { group -> group.cells.any { it.session != null || it.projectedCourseId != null } }
     var showHolidaySchedule by rememberSaveable(day.holiday) { mutableStateOf(false) }
-    val writable = day.writable && !day.holiday
+    val canEditDay = day.writable && (!beforeSemester || hasSchedule || day.holiday)
+    val writable = canEditDay && !day.holiday
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -324,13 +326,13 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenu(false) }) {
                     DropdownMenuItem(text = { Text(stringResource(if (day.holiday) R.string.undo_holiday else R.string.no_classes_today)) },
-                        onClick = { onMenu(false); onToggleHoliday() }, enabled = day.writable,
+                        onClick = { onMenu(false); onToggleHoliday() }, enabled = canEditDay,
                         leadingIcon = { Icon(painterResource(R.drawable.ic_holiday), null) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.use_weekday_timetable_menu)) },
-                        onClick = { onMenu(false); onCopyDay() }, enabled = day.writable,
+                        onClick = { onMenu(false); onCopyDay() }, enabled = canEditDay,
                         leadingIcon = { Icon(painterResource(R.drawable.ic_copy), null) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.add_extra_class_menu)) },
-                        onClick = { onMenu(false); onAddExtra() }, enabled = day.writable,
+                        onClick = { onMenu(false); onAddExtra() }, enabled = canEditDay,
                         leadingIcon = { Icon(painterResource(R.drawable.ic_add), null) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.duty_leave_menu)) },
                         onClick = { onMenu(false); onApplyLeave() }, enabled = writable && total > 0,
@@ -342,6 +344,13 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
         if (!isToday) {
             AssistChip(onClick = onToday, label = { Text(stringResource(R.string.today)) },
                 enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("return_today"))
+        }
+        if (beforeSemester) {
+            if (!hasSchedule && !day.holiday) {
+                EmptyState(stringResource(R.string.before_semester_start), "")
+                return@Column
+            }
+            Banner(stringResource(R.string.before_semester_start))
         }
         when {
             day.holiday -> Banner(stringResource(R.string.holiday_classes))

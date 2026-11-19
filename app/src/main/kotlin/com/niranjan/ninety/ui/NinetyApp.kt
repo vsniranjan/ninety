@@ -7,6 +7,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +33,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,9 +53,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -61,6 +68,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -81,12 +89,15 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.niranjan.ninety.R
 import com.niranjan.ninety.ui.courses.CoursesScreen
+import com.niranjan.ninety.ui.courses.CourseDetailScreen
 import com.niranjan.ninety.ui.day.DayScreen
 import com.niranjan.ninety.ui.designsystem.ActionIcon
+import com.niranjan.ninety.ui.designsystem.ActionRow
 import com.niranjan.ninety.ui.designsystem.EmptyState
-import com.niranjan.ninety.ui.history.HistoryScreen
+import com.niranjan.ninety.ui.calendar.CalendarScreen
 import com.niranjan.ninety.ui.leave.LeaveScreen
 import com.niranjan.ninety.ui.settings.SettingsScreen
+import com.niranjan.ninety.ui.settings.SemesterScreen
 import com.niranjan.ninety.ui.setup.SetupScreen
 import com.niranjan.ninety.ui.setup.SetupViewModel
 import com.niranjan.ninety.ui.timetable.TimetableExitHandler
@@ -96,30 +107,30 @@ import java.time.ZoneId
 import java.util.UUID
 import kotlin.math.roundToInt
 
-private const val ROUTE_TODAY = "day"
-private const val ROUTE_DAY = "$ROUTE_TODAY?date={date}&origin={origin}&addDutyLeave={addDutyLeave}"
+private const val ROUTE_TODAY = "today"
+private const val ROUTE_DAY = "day/{date}?origin={origin}&addDutyLeave={addDutyLeave}"
 private const val ROUTE_COURSES = "courses"
-private const val ROUTE_HISTORY = "history"
-private const val ROUTE_LEAVE = "leave"
-private const val ROUTE_COURSE_PENDING_LEAVE = "courses/{courseId}/pendingLeave"
+private const val ROUTE_CALENDAR = "calendar"
+private const val ROUTE_LEAVE = "courses/duty-leave?courseId={courseId}"
+private const val ROUTE_COURSE = "courses/detail/{courseId}"
+private const val ROUTE_SEMESTER = "settings/semester/{semesterId}"
 private const val ROUTE_SETTINGS = "settings"
-private const val ROUTE_TIMETABLE = "timetable"
+private const val ROUTE_TIMETABLE = "timetable?origin={origin}"
 
 private const val SLIDE_MS = 160
 private fun <T> slideTiming() = tween<T>(durationMillis = SLIDE_MS, easing = FastOutSlowInEasing)
 
 private fun dayRoute(date: LocalDate, origin: String, addDutyLeave: Boolean = false) =
-    "day?date=$date&origin=$origin&addDutyLeave=$addDutyLeave"
+    "day/$date?origin=$origin&addDutyLeave=$addDutyLeave"
 
 private val NavBackStackEntry.isDatedDay: Boolean
-    get() = destination.route == ROUTE_DAY && arguments?.getString("date") != null
+    get() = destination.route == ROUTE_DAY
 
 private data class Tab(val route: String, @StringRes val label: Int, val tag: String)
 private val TABS = listOf(
     Tab(ROUTE_TODAY, R.string.today, "tab_today"),
     Tab(ROUTE_COURSES, R.string.courses, "tab_courses"),
-    Tab(ROUTE_HISTORY, R.string.history, "tab_history"),
-    Tab(ROUTE_LEAVE, R.string.leave_tab, "tab_leave"),
+    Tab(ROUTE_CALENDAR, R.string.calendar, "tab_calendar"),
     Tab(ROUTE_SETTINGS, R.string.settings, "tab_settings"),
 )
 
@@ -136,7 +147,8 @@ fun NinetyApp(appModel: AppViewModel) {
             SetupScreen(setupModel, onSaved = appModel::closeSetup,
                 onCancel = if (showSetup && !state.needsSetup) appModel::closeSetup else null)
         }
-        else -> MainScaffold(appModel)
+        // Saved back stacks from the five-tab graph contain routes that no longer exist.
+        else -> key("four-tab-navigation") { MainScaffold(appModel) }
     }
 }
 
@@ -169,6 +181,7 @@ private fun MainScaffold(appModel: AppViewModel) {
     val appMessage by appModel.messages.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val semesterId = viewed?.let { UUID.fromString(it.entity.id) }
+    val semesterStart = viewed?.entity?.startDay?.let(LocalDate::ofEpochDay)
     val collegeZone = viewed?.let { ZoneId.of(it.entity.collegeZone) } ?: ZoneId.systemDefault()
     var today by remember(collegeZone) { mutableStateOf(LocalDate.now(collegeZone)) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { today = LocalDate.now(collegeZone) }
@@ -192,152 +205,254 @@ private fun MainScaffold(appModel: AppViewModel) {
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-    val expanded = maxWidth >= 600.dp
-    var timetableExit by remember { mutableStateOf<TimetableExitHandler?>(null) }
-    fun leaveCurrentScreen(navigate: () -> Unit) {
-        val confirmExit = timetableExit
-        if (currentRoute == ROUTE_TIMETABLE && confirmExit != null) confirmExit(navigate)
-        else navigate()
-    }
-    val selectTab: (Tab) -> Unit = { tab ->
-        val currentTabRoot = if (currentRoute == ROUTE_DAY && backStack?.isDatedDay == false) ROUTE_TODAY else currentRoute
-        if (currentTabRoot != tab.route || backStack?.isDatedDay == true) leaveCurrentScreen {
-            if (backStack?.isDatedDay == true) nav.popBackStack()
-            nav.navigate(tab.route) {
-                popUpTo(nav.graph.startDestinationId) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
+        val expanded = maxWidth >= 600.dp
+        var timetableExit by remember { mutableStateOf<TimetableExitHandler?>(null) }
+        fun leaveCurrentScreen(navigate: () -> Unit) {
+            val confirmExit = timetableExit
+            if (currentRoute == ROUTE_TIMETABLE && confirmExit != null) confirmExit(navigate)
+            else navigate()
+        }
+        var todayReset by rememberSaveable { mutableIntStateOf(0) }
+        val selectTab: (Tab) -> Unit = { tab ->
+            val selectedRoute = TABS[selectedTab].route
+            leaveCurrentScreen {
+                if (tab.route == selectedRoute) {
+                    if (tab.route == ROUTE_TODAY) {
+                        nav.popBackStack(nav.graph.startDestinationId, inclusive = false)
+                        todayReset++
+                    } else {
+                        nav.popBackStack(tab.route, inclusive = false)
+                    }
+                } else {
+                    // Today is the graph's start destination and its children share its back stack.
+                    if (selectedRoute == ROUTE_TODAY) {
+                        nav.popBackStack(nav.graph.startDestinationId, inclusive = false)
+                    }
+                    nav.navigate(tab.route) {
+                        popUpTo(nav.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
             }
         }
-    }
-    fun switchViewedSemester(id: UUID?, openSemesterSettings: Boolean = false) {
-        if (backStack?.isDatedDay == true) nav.popBackStack()
-        TABS.forEach { nav.clearBackStack(it.route) }
-        appModel.viewSemester(id)
-        nav.navigate(ROUTE_TODAY) { popUpTo(nav.graph.startDestinationId) { inclusive = true } }
-        if (openSemesterSettings) nav.navigate(ROUTE_SETTINGS)
-    }
-    val openSettings = { selectTab(TABS.last()) }
-    val openTimetable = { nav.navigate(ROUTE_TIMETABLE) }
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            val barColor = if (browsingOtherSemester) MaterialTheme.colorScheme.surfaceVariant
-                else MaterialTheme.colorScheme.background
-            Column(Modifier.background(barColor)) {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor),
-                    title = {
-                        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold)
-                    },
-                    navigationIcon = {
-                        if (backStack?.isDatedDay == true || currentRoute in listOf(ROUTE_TIMETABLE, ROUTE_COURSE_PENDING_LEAVE)) {
-                            ActionIcon(R.drawable.ic_back, stringResource(R.string.back), { leaveCurrentScreen { nav.popBackStack() } })
+        fun switchViewedSemester(id: UUID?, openSemesterSettings: Boolean = false) {
+            nav.popBackStack(nav.graph.startDestinationId, inclusive = false)
+            TABS.forEach { nav.clearBackStack(it.route) }
+            appModel.viewSemester(id?.takeUnless { it == appState.activeSemesterId })
+            nav.navigate(ROUTE_TODAY) { popUpTo(nav.graph.startDestinationId) { inclusive = true } }
+            if (openSemesterSettings) nav.navigate(ROUTE_SETTINGS)
+        }
+        val openSettings = { selectTab(TABS.last()) }
+        fun openTimetable(origin: String) { nav.navigate("timetable?origin=$origin") }
+        fun openLeave(courseId: String? = null) {
+            nav.navigate(if (courseId == null) "courses/duty-leave" else "courses/duty-leave?courseId=$courseId")
+        }
+        var showSemesterSwitcher by rememberSaveable { mutableStateOf(false) }
+        if (showSemesterSwitcher) {
+            AlertDialog(
+                onDismissRequest = { showSemesterSwitcher = false },
+                title = { Text(stringResource(R.string.switch_semester)) },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        appState.semesters.forEach { semester ->
+                            val id = UUID.fromString(semester.entity.id)
+                            ActionRow(
+                                if (id == semesterId) R.drawable.ic_check else R.drawable.ic_calendar,
+                                semester.entity.name,
+                                onClick = {
+                                    showSemesterSwitcher = false
+                                    if (id != semesterId) leaveCurrentScreen { switchViewedSemester(id) }
+                                },
+                                supportingText = when {
+                                    id == appState.activeSemesterId -> stringResource(R.string.current_semester)
+                                    semester.entity.archived -> stringResource(R.string.finished)
+                                    else -> null
+                                },
+                                modifier = Modifier.testTag("switch_semester_$id"),
+                            )
                         }
-                    },
-                    actions = {
-                        Column(Modifier.widthIn(max = 180.dp).padding(end = 24.dp),
-                            horizontalAlignment = Alignment.End) {
-                            viewed?.entity?.name?.let { Text(it, style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                            if (archived) Text(stringResource(R.string.finished),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSemesterSwitcher = false }) { Text(stringResource(R.string.cancel)) }
+                },
+            )
+        }
+        val canSwitch = appState.semesters.size > 1
+        val semesterLabel = viewed?.entity?.name?.let { name ->
+            if (archived) stringResource(R.string.semester_name_finished, name) else name
+        } ?: if (canSwitch) stringResource(R.string.switch_semester) else null
+        val title = when (currentRoute) {
+            ROUTE_COURSES -> R.string.courses
+            ROUTE_COURSE -> R.string.course_detail
+            ROUTE_CALENDAR -> R.string.calendar
+            ROUTE_LEAVE -> R.string.duty_leave
+            ROUTE_SETTINGS -> R.string.settings
+            ROUTE_SEMESTER -> R.string.semester
+            ROUTE_TIMETABLE -> R.string.timetable
+            else -> if (backStack?.isDatedDay == true) R.string.day else R.string.today
+        }
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                val barColor = if (browsingOtherSemester) MaterialTheme.colorScheme.surfaceVariant
+                    else MaterialTheme.colorScheme.background
+                Column(Modifier.background(barColor)) {
+                    TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor),
+                        expandedHeight = if (semesterLabel == null) 56.dp else
+                            (if (canSwitch) 48.dp else 26.dp) +
+                                30.dp * LocalDensity.current.fontScale.coerceAtLeast(1f),
+                        title = {
+                            Column {
+                                Text(stringResource(title), Modifier.semantics { heading() },
+                                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                if (semesterLabel != null) {
+                                    val modifier = if (canSwitch) Modifier
+                                        .clickable(role = Role.Button, onClickLabel = stringResource(R.string.switch_semester)) {
+                                            showSemesterSwitcher = true
+                                        }
+                                        .testTag("semester_switcher") else Modifier
+                                    Row(modifier.heightIn(min = if (canSwitch) 48.dp else 24.dp),
+                                        verticalAlignment = Alignment.CenterVertically) {
+                                        Text(semesterLabel, Modifier.weight(1f, fill = false),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = if (canSwitch) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        if (canSwitch) Icon(painterResource(R.drawable.ic_chevron_down), null,
+                                            Modifier.padding(horizontal = 6.dp).size(16.dp),
+                                            tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        },
+                        navigationIcon = {
+                            if (backStack?.isDatedDay == true ||
+                                currentRoute in listOf(ROUTE_TIMETABLE, ROUTE_COURSE, ROUTE_LEAVE, ROUTE_SEMESTER)) {
+                                ActionIcon(R.drawable.ic_back, stringResource(R.string.back), {
+                                    leaveCurrentScreen { nav.popBackStack() }
+                                })
+                            }
+                        },
+                    )
+                    if (browsingOtherSemester) {
+                        val name = viewed?.entity?.name.orEmpty()
+                        val activeName = activeSemester?.entity?.name
+                        val message = if (activeName != null) {
+                            stringResource(R.string.viewing_semester_back_to_active, name, activeName)
+                        } else stringResource(R.string.viewing_semester_back_to_settings, name)
+                        TextButton(
+                            onClick = { leaveCurrentScreen { switchViewedSemester(null, activeName == null) } },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("exit_browsed_semester"),
+                        ) {
+                            Text(message, textAlign = TextAlign.Center)
                         }
-                    })
-                if (browsingOtherSemester) {
-                    val name = viewed?.entity?.name.orEmpty()
-                    val activeName = activeSemester?.entity?.name
-                    val message = if (activeName != null) {
-                        stringResource(R.string.viewing_semester_back_to_active, name, activeName)
-                    } else stringResource(R.string.viewing_semester_back_to_settings, name)
-                    TextButton(
-                        onClick = { leaveCurrentScreen { switchViewedSemester(null, activeName == null) } },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("exit_browsed_semester"),
+                    }
+                }
+            },
+            bottomBar = { if (!expanded) SlidingTabBar(selectedTab, selectTab) },
+        ) { padding ->
+            Row(Modifier.fillMaxSize().padding(padding)) {
+                if (expanded) NavigationRail(containerColor = MaterialTheme.colorScheme.background) {
+                    TABS.forEachIndexed { index, tab ->
+                        val label = stringResource(tab.label)
+                        NavigationRailItem(selected = selectedTab == index, onClick = { selectTab(tab) },
+                            modifier = Modifier.testTag(tab.tag).semantics { contentDescription = label },
+                            icon = { Icon(painterResource(tabIcon(tab.tag)), null, Modifier.size(22.dp)) },
+                            label = { Text(label) })
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                    NavHost(nav, startDestination = ROUTE_TODAY, modifier = Modifier.fillMaxSize().widthIn(max = 760.dp).clipToBounds(),
+                        enterTransition = { slideIntoContainer(slideDirection(), slideTiming()) },
+                        exitTransition = { slideOutOfContainer(slideDirection(), slideTiming()) },
+                        popEnterTransition = { slideIntoContainer(slideDirection(back = true), slideTiming()) },
+                        popExitTransition = { slideOutOfContainer(slideDirection(back = true), slideTiming()) },
                     ) {
-                        Text(message, textAlign = TextAlign.Center)
+                        composable(ROUTE_TODAY) {
+                            SemesterContent(semesterId, openSettings) { id ->
+                                DayScreen(id, null, today, snackbar = snackbar, onEditTimetable = { openTimetable(ROUTE_TODAY) },
+                                    archived = archived, semesterStart = requireNotNull(semesterStart), resetToToday = todayReset)
+                            }
+                        }
+                        composable(ROUTE_DAY, arguments = listOf(
+                            navArgument("date") { type = NavType.StringType },
+                            navArgument("origin") { type = NavType.StringType; nullable = true; defaultValue = null },
+                            navArgument("addDutyLeave") { type = NavType.BoolType; defaultValue = false },
+                        )) { entry ->
+                            val initialDate = LocalDate.parse(requireNotNull(entry.arguments?.getString("date")))
+                            val origin = entry.arguments?.getString("origin") ?: ROUTE_TODAY
+                            SemesterContent(semesterId, openSettings) { id ->
+                                DayScreen(id, initialDate, today, snackbar = snackbar, onEditTimetable = { openTimetable(origin) },
+                                    addDutyLeave = entry.arguments?.getBoolean("addDutyLeave") == true, archived = archived,
+                                    semesterStart = requireNotNull(semesterStart))
+                            }
+                        }
+                        composable(ROUTE_COURSES) {
+                            SemesterContent(semesterId, openSettings) { id ->
+                                CoursesScreen(id, requireNotNull(semesterStart), today, snackbar,
+                                    onEditTimetable = { openTimetable(ROUTE_COURSES) },
+                                    onOpenLeave = { openLeave() },
+                                    onOpenCourse = { nav.navigate("courses/detail/$it") })
+                            }
+                        }
+                        composable(ROUTE_COURSE) { entry ->
+                            val courseId = requireNotNull(entry.arguments?.getString("courseId"))
+                            SemesterContent(semesterId, openSettings) { id ->
+                                CourseDetailScreen(id, courseId, today, snackbar,
+                                    onOpenDay = { nav.navigate(dayRoute(it, ROUTE_COURSES)) },
+                                    onOpenLeave = { openLeave(courseId) })
+                            }
+                        }
+                        composable(ROUTE_CALENDAR) {
+                            SemesterContent(semesterId, openSettings) { id ->
+                                CalendarScreen(id, requireNotNull(semesterStart), today,
+                                    onOpenDay = { nav.navigate(dayRoute(it, ROUTE_CALENDAR)) })
+                            }
+                        }
+                        composable(ROUTE_LEAVE, arguments = listOf(
+                            navArgument("courseId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        )) { entry ->
+                            SemesterContent(semesterId, openSettings) { id ->
+                                LeaveScreen(id, requireNotNull(semesterStart), snackbar, today,
+                                    courseId = entry.arguments?.getString("courseId")?.let(UUID::fromString),
+                                    onOpenDay = { nav.navigate(dayRoute(it, ROUTE_COURSES)) },
+                                    onAddDutyLeave = { nav.navigate(dayRoute(it, ROUTE_COURSES, addDutyLeave = true)) })
+                            }
+                        }
+                        composable(ROUTE_SETTINGS) {
+                            SettingsScreen(snackbar,
+                                onNewSemester = { appModel.viewSemester(null); appModel.openSetup() },
+                                onOpenSemester = { nav.navigate("settings/semester/$it") })
+                        }
+                        composable(ROUTE_SEMESTER) { entry ->
+                            val id = UUID.fromString(requireNotNull(entry.arguments?.getString("semesterId")))
+                            SemesterScreen(id, snackbar, onViewSemester = { switchViewedSemester(id) },
+                                onActiveChanged = { appModel.viewSemester(null) })
+                        }
+                        composable(ROUTE_TIMETABLE, arguments = listOf(
+                            navArgument("origin") { type = NavType.StringType; defaultValue = ROUTE_COURSES },
+                        )) {
+                            SemesterContent(semesterId, openSettings) { id ->
+                                TimetableScreen(id, today, snackbar, onDone = { nav.popBackStack() },
+                                    registerExitHandler = { timetableExit = it })
+                            }
+                        }
                     }
                 }
             }
-        },
-        bottomBar = { if (!expanded) SlidingTabBar(selectedTab, selectTab) },
-    ) { padding ->
-        Row(Modifier.fillMaxSize().padding(padding)) {
-            if (expanded) NavigationRail(containerColor = MaterialTheme.colorScheme.background) {
-                TABS.forEachIndexed { index, tab ->
-                    val label = stringResource(tab.label)
-                    NavigationRailItem(selected = selectedTab == index, onClick = { selectTab(tab) },
-                        modifier = Modifier.testTag(tab.tag).semantics { contentDescription = label },
-                        icon = { Icon(painterResource(tabIcon(tab.tag)), null, Modifier.size(22.dp)) },
-                        label = { Text(label) })
-                }
-            }
-            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
-        NavHost(nav, startDestination = ROUTE_TODAY, modifier = Modifier.fillMaxSize().widthIn(max = 760.dp).clipToBounds(),
-            enterTransition = { slideIntoContainer(slideDirection(), slideTiming()) },
-            exitTransition = { slideOutOfContainer(slideDirection(), slideTiming()) },
-            popEnterTransition = { slideIntoContainer(slideDirection(back = true), slideTiming()) },
-            popExitTransition = { slideOutOfContainer(slideDirection(back = true), slideTiming()) },
-        ) {
-            composable(ROUTE_DAY, arguments = listOf(
-                navArgument("date") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("origin") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("addDutyLeave") { type = NavType.BoolType; defaultValue = false },
-            )) { entry ->
-                val initialDate = entry.arguments?.getString("date")?.let(LocalDate::parse)
-                SemesterContent(semesterId, openSettings) { id ->
-                    DayScreen(id, initialDate, today, snackbar = snackbar, onEditTimetable = openTimetable,
-                        addDutyLeave = entry.arguments?.getBoolean("addDutyLeave") == true, archived = archived)
-                }
-            }
-            composable(ROUTE_COURSES) {
-                SemesterContent(semesterId, openSettings) { id ->
-                    CoursesScreen(id, snackbar, onEditTimetable = openTimetable,
-                        onOpenDay = { nav.navigate(dayRoute(it, ROUTE_COURSES)) },
-                        onOpenPendingLeave = { nav.navigate("courses/$it/pendingLeave") })
-                }
-            }
-            composable(ROUTE_COURSE_PENDING_LEAVE) { entry ->
-                val courseId = UUID.fromString(requireNotNull(entry.arguments?.getString("courseId")))
-                SemesterContent(semesterId, openSettings) { id ->
-                    LeaveScreen(id, snackbar, today, pendingCourseId = courseId) { date ->
-                        nav.navigate(dayRoute(date, ROUTE_COURSES, addDutyLeave = true))
-                    }
-                }
-            }
-            composable(ROUTE_HISTORY) {
-                SemesterContent(semesterId, openSettings) { id ->
-                    HistoryScreen(id, today, onOpenDay = { nav.navigate(dayRoute(it, ROUTE_HISTORY)) })
-                }
-            }
-            composable(ROUTE_LEAVE) {
-                SemesterContent(semesterId, openSettings) { LeaveScreen(it, snackbar, today) { date -> nav.navigate(dayRoute(date, ROUTE_LEAVE, addDutyLeave = true)) } }
-            }
-            composable(ROUTE_SETTINGS) {
-                SettingsScreen(snackbar,
-                    onNewSemester = { appModel.viewSemester(null); appModel.openSetup() },
-                    onViewSemester = { switchViewedSemester(it) },
-                    onActiveChanged = { appModel.viewSemester(null) })
-            }
-            composable(ROUTE_TIMETABLE) {
-                SemesterContent(semesterId, openSettings) { id ->
-                    TimetableScreen(id, today, snackbar, onDone = { nav.popBackStack() },
-                        registerExitHandler = { timetableExit = it })
-                }
-            }
         }
-            }
-        }
-    }
     }
 }
 
 private fun NavBackStackEntry.tabIndex(): Int {
     val tabRoute = when (destination.route) {
         ROUTE_DAY -> arguments?.getString("origin") ?: ROUTE_TODAY
-        ROUTE_TIMETABLE, ROUTE_COURSE_PENDING_LEAVE -> ROUTE_COURSES
+        ROUTE_TIMETABLE -> arguments?.getString("origin") ?: ROUTE_COURSES
+        ROUTE_COURSE, ROUTE_LEAVE -> ROUTE_COURSES
+        ROUTE_SEMESTER -> ROUTE_SETTINGS
         else -> destination.route
     }
     return TABS.indexOfFirst { it.route == tabRoute }.coerceAtLeast(0)
@@ -422,8 +537,7 @@ private fun SlidingTabBar(selectedIndex: Int, onSelect: (Tab) -> Unit) {
 private fun tabIcon(tag: String): Int = when (tag) {
     "tab_today" -> R.drawable.ic_today
     "tab_courses" -> R.drawable.ic_courses
-    "tab_history" -> R.drawable.ic_history
-    "tab_leave" -> R.drawable.ic_leave
+    "tab_calendar" -> R.drawable.ic_calendar
     else -> R.drawable.ic_settings
 }
 

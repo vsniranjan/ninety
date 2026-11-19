@@ -41,6 +41,7 @@ enum class DlStatus { PENDING, APPROVED, REJECTED }
 
 data class SessionView(
     val id: UUID,
+    val date: LocalDate,
     val courseId: UUID,
     val courseName: String,
     val courseType: CourseType,
@@ -230,6 +231,7 @@ interface NinetyRepository {
 
     suspend fun applyDutyLeave(semesterId: UUID, sessionIds: List<UUID>, title: String?, replace: Boolean = false): DlApplyResult
     suspend fun updateDlStatus(eventId: UUID, status: DlStatus, sessionIds: Set<UUID>? = null)
+    suspend fun removeDutyLeaveRequest(eventId: UUID)
     suspend fun undo(batchId: UUID): UndoResult
 
     suspend fun exportBackup(): ByteArray

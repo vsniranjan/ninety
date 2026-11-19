@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -102,7 +104,7 @@ fun SetupScreen(model: SetupViewModel, onSaved: () -> Unit = {}, onCancel: (() -
                     model::setSemesterName, model::setZone)
                 1 -> CoursesStep(state, onAdd = { courseDialog = CourseDraft() },
                     onEdit = { editingCourse = it }, onRemove = model::removeCourse)
-                2 -> TimetableStep(state, model::assign)
+                2 -> TimetableStep(state, model::copyDay, model::assign)
                 else -> ReviewStep(state)
             }
 
@@ -233,13 +235,13 @@ private fun CoursesStep(state: SetupState, onAdd: () -> Unit,
 }
 
 @Composable
-private fun TimetableStep(state: SetupState,
+private fun TimetableStep(state: SetupState, onCopy: (DayOfWeek, DayOfWeek) -> Unit,
     onAssign: (DayOfWeek, Int, UUID?) -> Unit) {
     val nameOf = state.courses.associate { it.id to it.name }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         WeeklySchedule(com.niranjan.ninety.domain.WeekTemplate(state.timetable.entries.groupBy(
             { it.key.first }, { it.key.second to it.value }).mapValues { it.value.toMap() }),
-            nameOf, slotTag = "setup_slot", onAssign = onAssign)
+            nameOf, slotTag = "setup_slot", onCopy = onCopy, onAssign = onAssign)
     }
 }
 
@@ -273,8 +275,10 @@ private fun ReviewStep(state: SetupState) {
 }
 
 @Composable
-private fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>, semesterStart: LocalDate?, today: LocalDate,
-    onSave: (CourseDraft) -> Unit, onDismiss: () -> Unit) {
+internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>, semesterStart: LocalDate?, today: LocalDate,
+    onSave: (CourseDraft) -> Unit, onDismiss: () -> Unit,
+    balanceLabel: Int = R.string.before_tracking, nameTag: String = "draft_name",
+    saveTag: String = "draft_save", saving: Boolean = false) {
     val focus = LocalFocusManager.current
     var draft by remember { mutableStateOf(existing) }
     var pickLogging by remember { mutableStateOf(false) }
@@ -307,12 +311,14 @@ private fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>,
                         ({ Text(stringResource(nameError)) }) else null,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
-                    modifier = Modifier.fillMaxWidth().testTag("draft_name"))
+                    modifier = Modifier.fillMaxWidth().testTag(nameTag))
                 ChoiceRow(CourseType.entries.map { it.name to typeLabel(it) }, draft.type.name,
                     onSelect = { draft = draft.copy(type = CourseType.valueOf(it)) })
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = showBalance, onCheckedChange = { showBalance = it })
-                    Text(stringResource(R.string.before_tracking),
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .toggleable(value = showBalance, role = Role.Checkbox, onValueChange = { showBalance = it }),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showBalance, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+                    Text(stringResource(balanceLabel),
                         style = MaterialTheme.typography.bodyMedium)
                 }
                 if (showBalance) {
@@ -349,8 +355,8 @@ private fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>,
             TextButton(onClick = {
                 onSave(if (showBalance) draft else draft.copy(conducted = "0",
                     present = "0", approvedDl = "0", pendingDl = "0"))
-            }, enabled = nameError == null && countError == null && dateError == null,
-                modifier = Modifier.testTag("draft_save")) { Text(stringResource(R.string.save)) }
+            }, enabled = !saving && nameError == null && countError == null && dateError == null,
+                modifier = Modifier.heightIn(min = 48.dp).testTag(saveTag)) { Text(stringResource(R.string.save)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
     if (pickLogging) {

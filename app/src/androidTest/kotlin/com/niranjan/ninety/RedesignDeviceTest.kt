@@ -120,25 +120,38 @@ class RedesignDeviceTest {
             ui.waitUntil(10_000) { ui.onAllNodesWithText("Includes", substring = true).fetchSemanticsNodes().isNotEmpty() }
             capture("phone-${theme.lowercase()}-courses")
             if (theme == "Light") {
-                ui.onAllNodesWithContentDescription("Details").onFirst().performClick()
+                ui.onNodeWithTag("courses_list").performScrollToNode(hasText("Operating Systems") and hasClickAction())
+                ui.onAllNodes(hasText("Operating Systems") and hasClickAction()).onFirst().performClick()
                 capture("phone-light-course-details")
+                ui.onNodeWithTag("tab_courses").performClick()
+                ui.onNodeWithTag("courses_list").performScrollToNode(hasTestTag("add_course"))
                 ui.onNodeWithTag("add_course").performClick()
                 waitFor("course_name")
                 capture("phone-light-course-editor")
                 ui.onNodeWithText("Cancel", substring = false).performClick()
-                ui.onAllNodesWithContentDescription("Hide details").onFirst().performClick()
             }
+            ui.onNodeWithTag("courses_list").performScrollToNode(hasTestTag("open_timetable"))
             ui.onNodeWithTag("open_timetable").performClick()
             waitFor("timetable_edit")
             capture("phone-${theme.lowercase()}-timetable")
             ui.onNodeWithTag("timetable_edit").performClick()
             capture("phone-${theme.lowercase()}-timetable-edit")
             ui.onNodeWithContentDescription("Back", substring = false).performClick()
-            tab("history")
+            tab("calendar")
             waitFor("month_prev")
-            capture("phone-${theme.lowercase()}-history")
-            tab("leave")
+            capture("phone-${theme.lowercase()}-calendar")
+            tab("courses")
+            ui.onNodeWithTag("open_duty_leave").performScrollTo().performClick()
             waitFor("dl_expand_$event")
+            if (theme == "Light") {
+                ui.onNodeWithTag("add_duty_leave").performScrollTo().performClick()
+                ui.onNodeWithText("OK").assertIsEnabled().performClick()
+                waitFor("dl_confirm")
+                ui.onNodeWithTag("dl_confirm").assertIsNotEnabled()
+                ui.onNodeWithText("Cancel").performClick()
+                ui.onNodeWithContentDescription("Back", substring = false).performClick()
+                waitFor("duty_leave_list")
+            }
             capture("phone-${theme.lowercase()}-leave")
             ui.onNodeWithTag("dl_expand_$event").performClick()
             capture("phone-${theme.lowercase()}-leave-details")
@@ -170,9 +183,42 @@ class RedesignDeviceTest {
         assertEquals(1, repo.observeAppState().first { it.loaded }.semesters.size)
     }
 
+    @Test fun addCourseWithAttendanceSoFarOffersTimetable() = runBlocking {
+        val initial = CourseSetup(input = CourseInput("Operating Systems", CourseType.THEORY))
+        val semester = repo.createSemester(SemesterSetup("Course add fixture", today.minusDays(7),
+            ZoneId.systemDefault().id, listOf(initial), WeekTemplate()))
+        waitFor("tab_courses")
+        tab("courses")
+        waitFor("courses_list")
+        ui.onNodeWithTag("courses_list").performScrollToNode(hasTestTag("add_course"))
+        ui.onNodeWithTag("add_course").performClick()
+        ui.onNodeWithTag("course_name").performTextInput("Databases")
+        ui.onNodeWithText("Attendance so far").performScrollTo().performClick()
+        ui.onNodeWithText("Classes held").performScrollTo().performTextReplacement("10")
+        ui.onNodeWithText("Attended in person").performScrollTo().performTextReplacement("8")
+        ui.onNodeWithText("Duty leave — pending").performScrollTo().performTextReplacement("1")
+        ui.onNodeWithTag("course_save").assertIsEnabled().performClick()
+
+        val saved = withTimeout(10_000) {
+            repo.observeCourseStats(semester, today).first { list -> list.any { it.course.name == "Databases" } }
+                .single { it.course.name == "Databases" }
+        }
+        assertEquals(10L, saved.balance.conducted)
+        assertEquals(8L, saved.balance.present)
+        assertEquals(1L, saved.balance.pendingDl)
+        val timetableAction = hasText("Timetable") and hasClickAction() and !hasTestTag("open_timetable")
+        ui.waitUntil(10_000) { ui.onAllNodes(timetableAction).fetchSemanticsNodes().isNotEmpty() }
+        ui.onNode(timetableAction).performClick()
+        waitFor("timetable_edit")
+    }
+
     private fun tab(name: String) {
         ui.onNodeWithTag("tab_$name").performClick()
         ui.waitForIdle()
+        if (name == "courses" && ui.onAllNodesWithTag("duty_leave_list").fetchSemanticsNodes().isNotEmpty()) {
+            ui.onNodeWithTag("tab_courses").performClick()
+            ui.waitForIdle()
+        }
     }
     private fun waitFor(tag: String) {
         ui.waitUntil(15_000) { ui.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }

@@ -6,15 +6,17 @@ Ninety is an offline Android attendance tracker with a fixed **90% minimum per c
 
 1. Create a semester, add theory and lab courses by name, and set up the timetable one weekday at a time. If you're starting mid-semester, enter each course's opening balance and first logging date.
 2. On **Today**, record a single period, log a lab as a group, or mark remaining eligible periods present. Use the day menu for holidays, copied timetables, extra classes, and duty leave. An extra class doesn't count unless you turn counting on.
-3. In **Courses**, see each course's percentage and how many periods you can miss or need to attend. Open **Details** for physical attendance, duty leave, and confirmed credit. Provisional and incomplete records stay flagged on the card.
-4. Use **History** to open a date and correct records. In **Leave**, change an entire request or just one period, then see the updated credit in Courses.
-5. In **Settings**, browse, complete, or reopen semesters, choose the theme, and optionally set a local reminder. Export a backup before moving phones. Restore previews the selected backup and replaces the current data only after you confirm.
+3. In **Courses**, see each course’s percentage and how many periods you can miss or need to attend. Tap a course for its attendance breakdown, dates that are not marked, duty leave, and course actions. Open **Timetable** to view or edit the weekly schedule. Open **Duty leave** to add, approve, reject, or remove a request, or to resolve pending leave from before tracking began.
+4. Use **Calendar** to find days that are not marked, open a date, or correct records. The **Today** button returns to the current month.
+5. In **Settings**, open a semester to view, rename, finish, or reopen it. Choose a theme, set an optional local reminder, or save and restore backups. Restore previews the selected backup and replaces the current data only after you confirm.
+
+Tap the selected tab to return to its root. When there is more than one semester, tap the semester name in the top bar to switch which one you’re viewing.
 
 [PROJECT_SPEC.md](PROJECT_SPEC.md) defines the attendance rules. [PROJECT_PROGRESS.md](PROJECT_PROGRESS.md) records verification and its limits.
 
 ## Screenshots
 
-These examples use a synthetic test semester.
+These examples use a synthetic test semester and show the interface before the four-tab update.
 
 <p>
   <img src="docs/screenshots/today.png" width="235" alt="Today in light mode showing theory and grouped lab periods" />

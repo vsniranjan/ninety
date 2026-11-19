@@ -13,6 +13,7 @@ import com.niranjan.ninety.NinetyApplication
 import com.niranjan.ninety.data.*
 import com.niranjan.ninety.domain.AttendanceOutcome
 import com.niranjan.ninety.domain.CourseType
+import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.domain.WeekTemplate
 import java.io.File
 import java.time.DayOfWeek
@@ -55,6 +56,7 @@ class V1UiTest {
     private lateinit var semesterId: UUID
     private lateinit var labId: UUID
     private lateinit var eventId: UUID
+    private lateinit var openingCourseId: UUID
     private val today = LocalDate.now()
     private val oldest = today.minusDays(28).let { it.minusDays((it.dayOfWeek.value - 1).toLong()) }
 
@@ -64,7 +66,11 @@ class V1UiTest {
             val theory = CourseSetup(input = CourseInput("Operating Systems", CourseType.THEORY))
             val lab = CourseSetup(input = CourseInput("Networks Lab", CourseType.LAB))
             labId = lab.courseId
-            val start = if (testName.methodName == "backlogOpensOldestDayAndListsAllDates") oldest else today
+            val start = when (testName.methodName) {
+                "backlogOpensOldestDayAndListsAllDates" -> oldest
+                "openingLeaveCanBeResolvedFromDutyLeave" -> today.minusDays(1)
+                else -> today
+            }
             semesterId = repo.createSemester(SemesterSetup("V1 UI fixture", start, ZoneId.systemDefault().id,
                 listOf(theory, lab), WeekTemplate(DayOfWeek.entries.take(5).associateWith {
                     mapOf(1 to theory.courseId, 3 to labId, 4 to labId, 5 to labId)
@@ -77,6 +83,11 @@ class V1UiTest {
                 .mapNotNull { it.session }.filter { it.courseId == leaveCourse }.map { it.id }
             if (testName.methodName != "todayKeepsPeriodsVisibleAndEditableAfterBulkLogging") {
                 eventId = repo.applyDutyLeave(semesterId, ids, "Campus event", false).eventId
+            }
+            if (testName.methodName == "openingLeaveCanBeResolvedFromDutyLeave") {
+                openingCourseId = UUID.randomUUID()
+                repo.addCourse(semesterId, CourseSetup(openingCourseId, CourseInput("Databases", CourseType.THEORY),
+                    OpeningBalance(openingCourseId, today, 10, 8, 0, 1)))
             }
             if (testName.methodName == "browsedSemesterBannerPersistsAcrossTabsAndExitsInOneTap") {
                 repo.setSemesterCompleted(semesterId, true)
@@ -91,8 +102,8 @@ class V1UiTest {
     @Test fun todayKeepsPeriodsVisibleAndEditableAfterBulkLogging(): Unit = runBlocking {
         compose.waitUntil(15_000) { exists("mark_all") }
         compose.onNodeWithText("Mark all present").assertIsDisplayed()
-        for (label in listOf("Today", "Courses", "History", "Leave", "Settings")) {
-            compose.onNodeWithText(label).assertIsDisplayed()
+        for (label in listOf("Today", "Courses", "Calendar", "Settings")) {
+            compose.onNode(hasTestTag("tab_${label.lowercase()}") and hasText(label)).assertIsDisplayed()
         }
         compose.onNodeWithTag("group_leave").assertDoesNotExist()
         capture("today-ready")
@@ -178,22 +189,26 @@ class V1UiTest {
         compose.onNodeWithText("Cancel").performClick()
 
         compose.onNodeWithTag("tab_courses").performClick()
-        val courseDates = "course_unmarked_$labId"
-        compose.waitUntil(10_000) { exists(courseDates) }
+        val courseRow = "course_row_$labId"
+        compose.waitUntil(10_000) { exists("courses_list") }
         compose.onNodeWithText("Some earlier days aren’t marked.", substring = true).assertExists()
-        compose.onNodeWithTag(courseDates).performScrollTo().performClick()
+        compose.onNodeWithTag("courses_list").performScrollToNode(hasTestTag(courseRow))
+        compose.onNodeWithTag(courseRow).performClick()
         val latestCourseDate = "course_unmarked_${dates.last()}"
-        compose.waitUntil(10_000) { exists(latestCourseDate) }
+        compose.waitUntil(10_000) { exists("course_detail") }
+        compose.onNodeWithTag("course_detail").performScrollToNode(hasTestTag(latestCourseDate))
         compose.onNodeWithTag(latestCourseDate).performClick()
         waitForDay(dates.last())
         compose.onNodeWithTag("tab_courses").assertIsSelected()
+        compose.onNodeWithTag("tab_courses").performClick()
+        compose.waitUntil(10_000) { exists("courses_list") && !exists("day_title") }
 
-        compose.onNodeWithTag("tab_history").performClick()
+        compose.onNodeWithTag("tab_calendar").performClick()
         val oldestRow = hasText("${dates[1].weekdayAndDate()} · 4 of 4 not marked")
         val latestRow = hasText("${dates.last().weekdayAndDate()} · 4 of 4 not marked")
-        val history = compose.onNodeWithTag("history_list")
+        val history = compose.onNodeWithTag("calendar_list")
         compose.waitUntil(10_000) { exists("day_cell_$today") }
-        history.performScrollToIndex(4)
+        history.performScrollToNode(latestRow)
         compose.onNode(latestRow).assertIsDisplayed()
         history.performScrollToNode(oldestRow)
         compose.onNode(oldestRow).performSemanticsAction(SemanticsActions.OnClick)
@@ -203,12 +218,32 @@ class V1UiTest {
         compose.onNodeWithTag("next_day").performClick()
         waitForDay(dates[1])
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.waitUntil(10_000) { exists("history_list") && !exists("day_title") }
+        compose.waitUntil(10_000) { exists("calendar_list") && !exists("day_title") }
+    }
+
+    @Test fun calendarStartsAtTheSemesterAndTodayResetsThePager() {
+        compose.waitUntil(15_000) { exists("day_title") }
+        compose.onNodeWithTag("previous_day").performClick()
+        waitForDay(today.minusDays(1))
+        compose.onNodeWithText("Before the semester started").assertIsDisplayed()
+        compose.onNodeWithTag("tab_today").performClick()
+        waitForDay(today)
+
+        compose.onNodeWithTag("tab_calendar").performClick()
+        compose.onNodeWithTag("month_prev").assertIsNotEnabled()
+        if (today.dayOfMonth > 1) {
+            compose.onNodeWithTag("day_cell_${today.minusDays(1)}").assertIsNotEnabled()
+        }
+        compose.onNodeWithTag("month_next").performClick()
+        compose.onNodeWithTag("calendar_today").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("day_cell_$today").assertIsDisplayed()
+        compose.onNodeWithTag("month_prev").assertIsNotEnabled()
     }
 
     @Test fun completedSemesterCanBeBrowsedAndReopenedFromSettings() = runBlocking {
         compose.waitUntil(15_000) { exists("tab_settings") }
         compose.onNodeWithTag("tab_settings").performClick()
+        openSemester()
         val lifecycle = "semester_lifecycle_$semesterId"
         compose.waitUntil(10_000) { exists(lifecycle) }
         compose.onNodeWithTag(lifecycle).performScrollTo().performClick()
@@ -217,11 +252,13 @@ class V1UiTest {
         compose.onNodeWithTag("tab_today").performClick()
         compose.onNodeWithText("No current semester.", substring = true).assertExists()
         compose.onNodeWithTag("tab_settings").performClick()
+        openSemester()
         compose.waitUntil(10_000) { exists("browse_$semesterId") }
         compose.onNodeWithTag("browse_$semesterId").performScrollTo().performClick()
         compose.waitUntil(10_000) { exists("day_title") }
-        compose.onNodeWithText("Finished").assertExists()
+        compose.onNodeWithText("V1 UI fixture · Finished").assertExists()
         compose.onNodeWithTag("tab_settings").performClick()
+        openSemester()
         compose.waitUntil(10_000) { exists(lifecycle) }
         compose.onNodeWithTag(lifecycle).performScrollTo().performClick()
         withTimeout(10_000) { repo.observeAppState().first { it.activeSemesterId == semesterId } }
@@ -233,11 +270,10 @@ class V1UiTest {
         compose.waitUntil(15_000) { exists("tab_settings") }
         val banner = "exit_browsed_semester"
         compose.onNodeWithTag(banner).assertDoesNotExist()
-        compose.onNodeWithTag("tab_settings").performClick()
-        compose.waitUntil(10_000) { exists("browse_$semesterId") }
-        compose.onNodeWithTag("browse_$semesterId").performScrollTo().performClick()
+        compose.onNodeWithTag("semester_switcher").performClick()
+        compose.onNodeWithTag("switch_semester_$semesterId").performClick()
         compose.waitUntil(10_000) { exists(banner) }
-        for (tab in listOf("today", "courses", "history", "leave", "settings")) {
+        for (tab in listOf("today", "courses", "calendar", "settings")) {
             compose.onNodeWithTag("tab_$tab").performClick()
             compose.onNodeWithTag(banner).assertIsDisplayed()
             compose.onNodeWithText("Viewing V1 UI fixture · Back to Current semester").assertIsDisplayed()
@@ -248,8 +284,9 @@ class V1UiTest {
     }
 
     @Test fun partialLeaveApprovalAndOpeningAnotherEventRefreshesItsPeriods(): Unit = runBlocking {
-        compose.waitUntil(15_000) { exists("tab_leave") }
-        compose.onNodeWithTag("tab_leave").performClick()
+        compose.waitUntil(15_000) { exists("tab_courses") }
+        compose.onNodeWithTag("tab_courses").performClick()
+        openDutyLeave()
         compose.waitUntil(10_000) { exists("dl_expand_$eventId") }
         compose.onNodeWithTag("dl_expand_$eventId").performScrollTo().performClick()
         val sessions = withTimeout(10_000) { repo.observeDlEventSessions(eventId).first() }
@@ -265,13 +302,31 @@ class V1UiTest {
         compose.onNodeWithTag("dl_expand_$second").performScrollTo().performClick()
         compose.waitUntil(10_000) { exists("dl_status_${theory.id}") }
         compose.onNodeWithTag("dl_status_${theory.id}").performScrollTo().assertIsDisplayed()
+
+        val periodDay = "dl_open_day_${theory.id}"
+        compose.onNodeWithTag(periodDay).performScrollTo().performClick()
+        waitForDay(today)
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(10_000) { exists("duty_leave_list") }
+        val remove = "dl_remove_$second"
+        compose.onNodeWithTag("duty_leave_list").performScrollToNode(hasTestTag(remove))
+        compose.onNodeWithTag(remove).performClick()
+        compose.onNodeWithTag("confirm_action").performClick()
+        withTimeout(10_000) { repo.observeDlEvents(semesterId).first { it.first { event -> event.id == second }.periods == 0 } }
+        compose.waitUntil(10_000) { !exists("dl_expand_$second") &&
+            compose.onAllNodesWithText("Duty leave request removed").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitUntil(10_000) {
+            exists("dl_expand_$second") || compose.onAllNodesWithText("That change can no longer be undone.").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(1, repo.observeDlEvents(semesterId).first().first { it.id == second }.pending)
     }
 
     @Test fun twoHundredPercentTextKeepsIconActionsReachableInBothThemes() {
         compose.waitUntil(15_000) { exists("tab_today") }
         assertEquals(2f, compose.activity.resources.configuration.fontScale, 0.01f)
-        for (label in listOf("Today", "Courses", "History", "Leave", "Settings")) {
-            compose.onNodeWithText(label).assertIsDisplayed()
+        for (label in listOf("Today", "Courses", "Calendar", "Settings")) {
+            compose.onNode(hasTestTag("tab_${label.lowercase()}") and hasText(label)).assertIsDisplayed()
         }
         compose.waitUntil(15_000) { exists("group_present") }
         compose.onNodeWithTag("group_present").performScrollTo()
@@ -303,30 +358,40 @@ class V1UiTest {
             capture("$name-today-200")
             compose.onNodeWithTag("group_present").assertIsDisplayed()
             compose.onNodeWithTag("tab_courses").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("if leave is rejected", substring = true).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("0.0 % if leave is rejected").assertIsDisplayed()
+            compose.waitUntil(10_000) { exists("courses_list") || exists("duty_leave_list") }
+            if (exists("duty_leave_list")) compose.onNodeWithTag("tab_courses").performClick()
+            val comparison = hasText("0.0 % if leave is rejected")
+            compose.waitUntil(10_000) { exists("courses_list") }
+            compose.onNodeWithTag("courses_list").performScrollToNode(comparison)
+            compose.onNode(comparison).assertIsDisplayed()
             compose.onNodeWithText("counting 1 pending duty-leave period", substring = true).assertExists()
             capture("$name-courses-200")
-            compose.onNodeWithTag("tab_leave").performClick()
-            compose.waitUntil(10_000) { exists("dl_expand_$eventId") }
+            openDutyLeave()
+            compose.waitUntil(10_000) { exists("dl_totals") }
+            compose.onNodeWithTag("duty_leave_list").performScrollToNode(hasTestTag("dl_expand_$eventId"))
             capture("$name-leave-200")
-            compose.onNodeWithTag("tab_history").performClick()
+            compose.onNodeWithTag("tab_calendar").performClick()
             compose.waitUntil(10_000) { exists("day_cell_$today") }
             compose.onNodeWithText("Different timetable").assertIsDisplayed()
-            capture("$name-history-200")
+            capture("$name-calendar-200")
         }
     }
 
     @Test fun coursesLinkToPendingLeaveAndSettingsSharesTheExplainer() {
         compose.waitUntil(15_000) { exists("tab_courses") }
         compose.onNodeWithTag("tab_courses").performClick()
-        val allowance = hasText("counting 3 pending duty-leave periods", substring = true) and hasClickAction()
-        compose.waitUntil(10_000) { compose.onAllNodes(allowance).fetchSemanticsNodes().isNotEmpty() }
+        val courseRow = "course_row_$labId"
+        compose.waitUntil(10_000) { exists("courses_list") }
         compose.onNodeWithText("1 at the limit", substring = true).assertExists()
-        compose.onNode(allowance).performScrollTo().performClick()
+        compose.onNodeWithTag("courses_list").performScrollToNode(hasTestTag(courseRow))
+        compose.onNodeWithTag(courseRow).assert(hasText("counting 3 pending duty-leave periods", substring = true)).performClick()
+        compose.waitUntil(10_000) { exists("course_detail") }
+        compose.onNodeWithTag("course_detail").performScrollToNode(hasTestTag("course_duty_leave"))
+        compose.onNodeWithTag("course_duty_leave").performClick()
         compose.waitUntil(10_000) { exists("dl_expand_$eventId") }
-        compose.onNodeWithText("Pending duty leave").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Networks Lab", substring = false).assertIsDisplayed()
+        compose.onNodeWithTag("tab_courses").performClick()
+        compose.waitUntil(10_000) { exists("courses_list") }
 
         compose.onNodeWithTag("attendance_rules").performClick()
         val units = "“Can miss” is measured in periods."
@@ -334,9 +399,25 @@ class V1UiTest {
         compose.onNodeWithText("Done").performClick()
 
         compose.onNodeWithTag("tab_settings").performClick()
-        compose.onNodeWithContentDescription("About Ninety").performClick()
+        compose.onNodeWithTag("open_about").performScrollTo().performClick()
         compose.onNodeWithText("How attendance is calculated").performClick()
         compose.onNodeWithText(units, substring = true).assertIsDisplayed()
+    }
+
+    @Test fun openingLeaveCanBeResolvedFromDutyLeave() {
+        compose.waitUntil(15_000) { exists("tab_courses") }
+        compose.onNodeWithTag("tab_courses").performClick()
+        openDutyLeave()
+        val approve = hasTestTag("dl_opening_approve_$openingCourseId")
+        compose.waitUntil(10_000) { exists("duty_leave_list") }
+        compose.onNodeWithTag("duty_leave_list").performScrollToNode(approve)
+        compose.onNodeWithText("From before you started tracking").assertExists()
+        compose.onNode(approve).performClick()
+        compose.waitUntil(10_000) { !exists("dl_opening_approve_$openingCourseId") }
+        assertEquals(1L, runBlocking {
+            repo.observeCourseStats(semesterId, today).first()
+                .single { it.balance.courseId == openingCourseId }.balance.approvedDl
+        })
     }
 
     @Test fun timetablePromptsBeforeLeavingAnEditedDraft() {
@@ -358,7 +439,20 @@ class V1UiTest {
 
         compose.onNodeWithTag("tab_settings").performClick()
         compose.onNodeWithText("Discard").performClick()
-        compose.onNodeWithText("Theme").assertIsDisplayed()
+        compose.onNodeWithText("Theme").performScrollTo().assertIsDisplayed()
+    }
+
+    private fun openSemester() {
+        val tag = "open_semester_$semesterId"
+        val alreadyOpen = "browse_$semesterId"
+        compose.waitUntil(10_000) { exists(tag) || exists(alreadyOpen) }
+        if (exists(tag)) compose.onNodeWithTag(tag).performScrollTo().performClick()
+    }
+
+    private fun openDutyLeave() {
+        compose.waitUntil(10_000) { exists("courses_list") }
+        compose.onNodeWithTag("courses_list").performScrollToNode(hasTestTag("open_duty_leave"))
+        compose.onNodeWithTag("open_duty_leave").performClick()
     }
 
     private fun waitForDay(date: LocalDate) {

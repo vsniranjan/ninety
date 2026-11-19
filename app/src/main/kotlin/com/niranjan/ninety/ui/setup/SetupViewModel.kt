@@ -77,6 +77,11 @@ class SetupViewModel(private val repository: NinetyRepository) : ViewModel() {
         it.copy(timetable = next)
     }
 
+    fun copyDay(from: DayOfWeek, to: DayOfWeek) = _state.update { s ->
+        val source = s.timetable.filterKeys { it.first == from }.mapKeys { to to it.key.second }
+        s.copy(timetable = s.timetable.filterKeys { it.first != to } + source)
+    }
+
     fun next() {
         val s = _state.value
         val error = when (s.step) {

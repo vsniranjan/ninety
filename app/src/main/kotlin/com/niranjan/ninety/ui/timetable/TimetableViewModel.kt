@@ -11,6 +11,7 @@ import com.niranjan.ninety.ui.userMessage
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,8 @@ class TimetableViewModel(private val repository: NinetyRepository, private val s
     val draft = MutableStateFlow<WeekTemplate?>(null)
     val effectiveFrom = MutableStateFlow(LocalDate.now())
     val messages = MutableStateFlow<String?>(null)
+    private val _preview = MutableStateFlow<List<ConflictInfo>?>(null)
+    val preview: StateFlow<List<ConflictInfo>?> = _preview
     val saving = MutableStateFlow(false)
 
     private var originalTemplate: WeekTemplate? = null
@@ -47,22 +50,52 @@ class TimetableViewModel(private val repository: NinetyRepository, private val s
         draft.value = draft.value?.with(day, slot, courseId)
     }
 
+    fun copyDay(from: DayOfWeek, to: DayOfWeek) {
+        val template = draft.value ?: return
+        val source = template.assignments[from].orEmpty()
+        val assignments = if (source.isEmpty()) template.assignments - to
+            else template.assignments + (to to source)
+        draft.value = WeekTemplate(assignments)
+    }
+
     fun setEffective(date: LocalDate) { effectiveFrom.value = date }
 
     fun cancelEditing() { draft.value = null }
 
-    fun save(onSaved: (List<ConflictInfo>) -> Unit) {
+    fun save(today: LocalDate, onSaved: (List<ConflictInfo>) -> Unit) =
+        saveDraft(previewFirst = effectiveFrom.value == today, onSaved)
+
+    fun confirmSave(onSaved: (List<ConflictInfo>) -> Unit) {
+        if (_preview.value != null) saveDraft(previewFirst = false, onSaved)
+    }
+
+    fun cancelPreview() { _preview.value = null }
+
+    private fun saveDraft(previewFirst: Boolean, onSaved: (List<ConflictInfo>) -> Unit) {
         val template = draft.value ?: return
+        val date = effectiveFrom.value
         if (saving.value) return
         saving.value = true
+        _preview.value = null
         viewModelScope.launch {
-            runCatching { repository.saveTemplate(semesterId, template, effectiveFrom.value) }
-                .onSuccess { conflicts ->
-                    draft.value = null
-                    onSaved(conflicts)
+            try {
+                if (previewFirst) {
+                    val conflicts = repository.previewTemplateConflicts(semesterId, template, date)
+                    if (conflicts.isNotEmpty()) {
+                        _preview.value = conflicts
+                        return@launch
+                    }
                 }
-                .onFailure { messages.value = it.userMessage() }
-            saving.value = false
+                val conflicts = repository.saveTemplate(semesterId, template, date)
+                draft.value = null
+                onSaved(conflicts)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                messages.value = error.userMessage()
+            } finally {
+                saving.value = false
+            }
         }
     }
 

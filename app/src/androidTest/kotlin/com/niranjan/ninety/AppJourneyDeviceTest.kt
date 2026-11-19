@@ -172,25 +172,28 @@ class AppJourneyDeviceTest {
             rule.onAllNodesWithText("Operating Systems", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNodeWithText("Networks Lab", substring = true).assertExists()
-        rule.onNodeWithTag("tab_history").activate()
-        rule.onNodeWithTag("tab_leave").activate()
+        rule.onNodeWithTag("tab_calendar").activate()
+        rule.onNodeWithTag("tab_courses").activate()
+        rule.onNodeWithTag("open_duty_leave").performScrollTo().activate()
         rule.waitUntil(10_000) { exists("dl_expand_${leave.id}") }
         rule.onNodeWithTag("dl_expand_${leave.id}").activate()
         val period = withTimeout(10_000) { repo.observeDlEventSessions(leave.id).first { it.isNotEmpty() } }.first()
         rule.waitUntil(10_000) { exists("dl_status_${period.id}") }
-        rule.onNodeWithTag("dl_status_${period.id}").activate()
+        rule.onNodeWithTag("dl_status_${period.id}").performScrollTo().activate()
         rule.onNodeWithText("Approved", substring = false).activate()
         await { repo.observeDlEvents(semesterId).first().single().approved == 1 }
         rule.waitUntil(10_000) { rule.onAllNodesWithText("Mixed approval").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("tab_settings").activate()
         rule.onAllNodesWithText(semesterName, substring = true).onFirst().assertExists()
+        rule.onNodeWithTag("open_semester_$semesterId").performScrollTo().activate()
         val lifecycle = rule.onNodeWithTag("semester_lifecycle_$semesterId")
         lifecycle.performScrollTo().activate()
         rule.onNodeWithTag("confirm_action").activate()
         await { repo.observeAppState().first().activeSemesterId == null }
         rule.onNodeWithTag("browse_$semesterId").performScrollTo().activate()
-        rule.waitUntil(10_000) { rule.onAllNodesWithText("Finished").fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(10_000) { rule.onAllNodesWithText("Finished", substring = true).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("tab_settings").activate()
+        rule.onNodeWithTag("open_semester_$semesterId").performScrollTo().activate()
         lifecycle.performScrollTo().activate()
         await { repo.observeAppState().first().activeSemesterId == semesterId }
         rule.onNodeWithTag("tab_today").activate()

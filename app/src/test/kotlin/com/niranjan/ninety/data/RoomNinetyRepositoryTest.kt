@@ -329,6 +329,30 @@ class RoomNinetyRepositoryTest {
         assertEquals(AttendanceOutcome.DL_PENDING, sessionsOf(today).single { it.id == phys.id }.outcome)
     }
 
+    @Test
+    fun `removing a duty leave request clears its remaining periods and undo restores their approvals`() = runTest {
+        seedSemester()
+        val mondayMath = sessionsOf(monday).first { it.courseId == mathId }.id
+        val wednesdayMath = sessionsOf(today).first { it.courseId == mathId }.id
+        val physics = sessionsOf(today).first { it.courseId == physId }.id
+        val event = repository.applyDutyLeave(semesterId, listOf(mondayMath, wednesdayMath, physics), "Campus event")
+        repository.updateDlStatus(event.eventId, DlStatus.APPROVED, setOf(mondayMath))
+        repository.updateDlStatus(event.eventId, DlStatus.REJECTED, setOf(wednesdayMath))
+        repository.recordPeriod(physics, AttendanceOutcome.PRESENT)
+
+        repository.removeDutyLeaveRequest(event.eventId)
+
+        assertEquals(0, repository.observeDlEvents(semesterId).first().single().periods)
+        assertEquals(AttendanceOutcome.UNRECORDED, sessionsOf(monday).single { it.id == mondayMath }.outcome)
+        assertEquals(AttendanceOutcome.UNRECORDED, sessionsOf(today).single { it.id == wednesdayMath }.outcome)
+        assertEquals(AttendanceOutcome.PRESENT, sessionsOf(today).single { it.id == physics }.outcome)
+        assertEquals(UndoResult.DONE, undoLatest())
+        val restored = repository.observeDlEventSessions(event.eventId).first()
+        assertEquals(mapOf(mondayMath to DlStatus.APPROVED, wednesdayMath to DlStatus.REJECTED),
+            restored.associate { it.id to it.dlStatus })
+        assertEquals(mapOf(mondayMath to monday, wednesdayMath to today), restored.associate { it.id to it.date })
+    }
+
     // ---------------------------------------------------------------- undo
 
     @Test

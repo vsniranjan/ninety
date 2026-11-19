@@ -40,12 +40,10 @@ import com.niranjan.ninety.domain.WeekTemplate
 import com.niranjan.ninety.ui.designsystem.ActionIcon
 import com.niranjan.ninety.ui.designsystem.ActionRow
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
-import com.niranjan.ninety.ui.designsystem.ScreenHeading
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.designsystem.WeeklySchedule
 import com.niranjan.ninety.ui.displayMessage
 import com.niranjan.ninety.ui.ninetyViewModel
-import com.niranjan.ninety.ui.slotLabel
 import com.niranjan.ninety.ui.weekdayAndDate
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -66,9 +64,14 @@ internal fun TimetableScreen(semesterId: UUID, today: LocalDate, snackbar: Snack
     val message by model.messages.collectAsStateWithLifecycle()
     val displayedMessage = message?.let { displayMessage(it) }
     val saving by model.saving.collectAsStateWithLifecycle()
+    val preview by model.preview.collectAsStateWithLifecycle()
     var conflicts by remember { mutableStateOf<List<ConflictInfo>?>(null) }
     var pickEffective by remember { mutableStateOf(false) }
     var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun showSaveResult(result: List<ConflictInfo>) {
+        if (result.isEmpty()) onDone() else conflicts = result
+    }
+
     fun requestExit(leave: () -> Unit) {
         if (model.saving.value) return
         if (model.hasChanges()) {
@@ -105,12 +108,10 @@ internal fun TimetableScreen(semesterId: UUID, today: LocalDate, snackbar: Snack
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
         val savedVersions = versions
-        ScreenHeading(stringResource(R.string.timetable)) {
-            if (draft == null && savedVersions != null) {
-                ActionIcon(R.drawable.ic_edit, stringResource(R.string.edit_timetable),
-                    { model.startEditing(savedVersions.lastOrNull()?.template, today) },
-                    modifier = Modifier.testTag("timetable_edit"))
-            }
+        if (draft == null && savedVersions != null) {
+            ActionRow(R.drawable.ic_edit, stringResource(R.string.edit_timetable),
+                { model.startEditing(savedVersions.lastOrNull()?.template, today) },
+                modifier = Modifier.testTag("timetable_edit"))
         }
 
         val template = draft
@@ -121,9 +122,7 @@ internal fun TimetableScreen(semesterId: UUID, today: LocalDate, snackbar: Snack
                     Text(stringResource(R.string.cancel))
                 }
                 Button(onClick = {
-                    model.save { result ->
-                        if (result.isEmpty()) onDone() else conflicts = result
-                    }
+                    model.save(today, ::showSaveResult)
                 }, enabled = !saving && effectiveFrom >= today,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("timetable_save")) {
                     Text(stringResource(R.string.save))
@@ -135,7 +134,7 @@ internal fun TimetableScreen(semesterId: UUID, today: LocalDate, snackbar: Snack
                 Column(Modifier.fillMaxWidth().padding(8.dp)) {
                     ActionRow(R.drawable.ic_calendar,
                         stringResource(R.string.effective_from, effectiveFrom.weekdayAndDate()),
-                        onClick = { pickEffective = true }, modifier = Modifier.testTag("timetable_effective_date"),
+                        onClick = { if (!saving) pickEffective = true }, modifier = Modifier.testTag("timetable_effective_date"),
                         supportingText = stringResource(R.string.effective_date_help))
                     if (effectiveFrom < today) Text(stringResource(R.string.effective_date_past),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
@@ -143,7 +142,7 @@ internal fun TimetableScreen(semesterId: UUID, today: LocalDate, snackbar: Snack
                 }
             }
             Spacer(Modifier.height(12.dp))
-            TimetableGrid(template, courses, weekday, editable = !saving) { day, slot, course ->
+            TimetableGrid(template, courses, weekday, editable = !saving, onCopy = model::copyDay) { day, slot, course ->
                 model.edit(day, slot, course)
             }
         } else if (savedVersions == null) {
@@ -169,20 +168,14 @@ internal fun TimetableScreen(semesterId: UUID, today: LocalDate, snackbar: Snack
         Spacer(Modifier.height(24.dp))
     }
 
+    preview?.let { list ->
+        TimetableConflictDialog(list, preview = true,
+            onConfirm = { model.confirmSave(::showSaveResult) }, onDismiss = model::cancelPreview)
+    }
+
     conflicts?.let { list ->
-        AlertDialog(onDismissRequest = { conflicts = null; onDone() },
-            title = { Text(pluralStringResource(R.plurals.timetable_saved_conflicts, list.size, list.size)) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    list.take(6).forEach {
-                        Text(stringResource(R.string.timetable_conflict_period, it.date.weekdayAndDate(), slotLabel(it.slot), it.courseName),
-                            style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (list.size > 6) Text(stringResource(R.string.timetable_conflict_more, list.size - 6),
-                        style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = { TextButton(onClick = { conflicts = null; onDone() }) { Text(stringResource(R.string.done)) } })
+        val close = { conflicts = null; onDone() }
+        TimetableConflictDialog(list, preview = false, onConfirm = close, onDismiss = close)
     }
 
     if (pickEffective) {
@@ -192,8 +185,39 @@ internal fun TimetableScreen(semesterId: UUID, today: LocalDate, snackbar: Snack
 }
 
 @Composable
+private fun TimetableConflictDialog(conflicts: List<ConflictInfo>, preview: Boolean,
+    onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss,
+        title = { Text(stringResource(if (preview) R.string.timetable_preview_title else R.string.timetable_saved)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(pluralStringResource(
+                    if (preview) R.plurals.timetable_preview_conflicts else R.plurals.timetable_saved_conflicts,
+                    conflicts.size, conflicts.size))
+                conflicts.forEach { conflict ->
+                    val period = conflict.slot?.let { stringResource(R.string.numbered_period, it) }
+                        ?: stringResource(R.string.extra_class)
+                    Text(stringResource(R.string.timetable_conflict_period,
+                        conflict.date.weekdayAndDate(), period, conflict.courseName))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(if (preview) R.string.save_anyway else R.string.done))
+            }
+        },
+        dismissButton = if (preview) ({
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.cancel))
+            }
+        }) else null)
+}
+
+@Composable
 private fun TimetableGrid(template: WeekTemplate, courses: List<CourseEntity>, initialWeekday: DayOfWeek,
-    editable: Boolean, onAssign: (DayOfWeek, Int, UUID?) -> Unit) {
+    editable: Boolean, onCopy: (DayOfWeek, DayOfWeek) -> Unit = { _, _ -> },
+    onAssign: (DayOfWeek, Int, UUID?) -> Unit) {
     WeeklySchedule(template, courses.filter { !it.retired }.associate { UUID.fromString(it.id) to it.name },
-        editable = editable, initialWeekday = initialWeekday, onAssign = onAssign)
+        editable = editable, initialWeekday = initialWeekday, onCopy = onCopy, onAssign = onAssign)
 }

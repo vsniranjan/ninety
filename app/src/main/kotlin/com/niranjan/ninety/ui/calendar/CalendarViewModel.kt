@@ -1,4 +1,4 @@
-package com.niranjan.ninety.ui.history
+package com.niranjan.ninety.ui.calendar
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,9 +17,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class HistoryViewModel(private val repository: NinetyRepository, private val semesterId: UUID, today: LocalDate = LocalDate.now()) : ViewModel() {
+class CalendarViewModel(private val repository: NinetyRepository, private val semesterId: UUID, semesterStart: LocalDate, today: LocalDate) : ViewModel() {
 
-    val month = MutableStateFlow(YearMonth.from(today))
+    private val firstMonth = YearMonth.from(semesterStart)
+    val month = MutableStateFlow(maxOf(firstMonth, YearMonth.from(today)))
     val summaries: StateFlow<List<DaySummary>> = month.flatMapLatest {
         repository.observeMonth(semesterId, it)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -39,5 +40,7 @@ class HistoryViewModel(private val repository: NinetyRepository, private val sem
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun moveMonth(delta: Long) { month.value = month.value.plusMonths(delta) }
+    fun moveMonth(delta: Long) { month.value = maxOf(firstMonth, month.value.plusMonths(delta)) }
+
+    fun showToday(today: LocalDate) { month.value = maxOf(firstMonth, YearMonth.from(today)) }
 }

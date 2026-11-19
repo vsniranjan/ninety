@@ -1,4 +1,4 @@
-package com.niranjan.ninety.ui.history
+package com.niranjan.ninety.ui.calendar
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -23,10 +23,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -37,7 +36,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -54,7 +52,7 @@ import com.niranjan.ninety.data.DaySummary
 import com.niranjan.ninety.domain.DayKind
 import com.niranjan.ninety.ui.collegeWeekdays
 import com.niranjan.ninety.ui.designsystem.NinetyCard
-import com.niranjan.ninety.ui.designsystem.ScreenHeading
+import com.niranjan.ninety.ui.designsystem.ActionIcon
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.long
 import com.niranjan.ninety.ui.ninetyViewModel
@@ -67,35 +65,38 @@ import java.util.Locale
 import java.util.UUID
 
 @Composable
-fun HistoryScreen(semesterId: UUID, today: LocalDate = LocalDate.now(), onOpenDay: (LocalDate) -> Unit) {
-    val model = ninetyViewModel<HistoryViewModel>(key = "history-$semesterId-$today") {
-        HistoryViewModel(it.repository, semesterId, today)
+fun CalendarScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate, onOpenDay: (LocalDate) -> Unit) {
+    val model = ninetyViewModel<CalendarViewModel>(key = "calendar-$semesterId-$semesterStart-$today") {
+        CalendarViewModel(it.repository, semesterId, semesterStart, today)
     }
     val month by model.month.collectAsStateWithLifecycle()
     val days by model.summaries.collectAsStateWithLifecycle()
     val incomplete by model.incomplete.collectAsStateWithLifecycle()
     val byDate = days.associateBy { it.date }
 
-    LazyColumn(Modifier.fillMaxSize().testTag("history_list"),
+    LazyColumn(Modifier.fillMaxSize().testTag("calendar_list"),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Box(Modifier.padding(horizontal = 24.dp)) { ScreenHeading(stringResource(R.string.history)) } }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { model.moveMonth(-1) }, modifier = Modifier.testTag("month_prev")) {
-                    Icon(painterResource(R.drawable.ic_back), stringResource(R.string.previous_month))
-                }
+                ActionIcon(R.drawable.ic_back, stringResource(R.string.previous_month), { model.moveMonth(-1) },
+                    modifier = Modifier.testTag("month_prev"), enabled = month > YearMonth.from(semesterStart))
                 Text(monthLabel(month), style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center)
-                IconButton(onClick = { model.moveMonth(1) }, modifier = Modifier.testTag("month_next")) {
-                    Icon(painterResource(R.drawable.ic_forward), stringResource(R.string.next_month))
+                ActionIcon(R.drawable.ic_forward, stringResource(R.string.next_month), { model.moveMonth(1) },
+                    modifier = Modifier.testTag("month_next"))
+            }
+            if (month != YearMonth.from(today) && today >= semesterStart) {
+                TextButton(onClick = { model.showToday(today) },
+                    modifier = Modifier.padding(horizontal = 24.dp).heightIn(min = 48.dp).testTag("calendar_today")) {
+                    Text(stringResource(R.string.today))
                 }
             }
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MonthGrid(month, byDate, today, onOpenDay)
+                MonthGrid(month, byDate, today, semesterStart, onOpenDay)
                 CalendarLegend()
             }
         }
@@ -126,7 +127,7 @@ private fun monthLabel(month: YearMonth): String =
     "${month.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${month.year}"
 
 @Composable
-private fun MonthGrid(month: YearMonth, days: Map<LocalDate, DaySummary>, today: LocalDate, onOpenDay: (LocalDate) -> Unit) {
+private fun MonthGrid(month: YearMonth, days: Map<LocalDate, DaySummary>, today: LocalDate, semesterStart: LocalDate, onOpenDay: (LocalDate) -> Unit) {
     val first = month.atDay(1)
     val lead = (first.dayOfWeek.value - DayOfWeek.MONDAY.value)
     val cells = buildList<LocalDate?> {
@@ -151,7 +152,7 @@ private fun MonthGrid(month: YearMonth, days: Map<LocalDate, DaySummary>, today:
                         Row(Modifier.fillMaxWidth()) {
                             week.forEach { date ->
                                 Box(Modifier.weight(1f).aspectRatio(1f), contentAlignment = Alignment.Center) {
-                                    if (date != null) DayCell(date, days[date], today, onOpenDay)
+                                    if (date != null) DayCell(date, days[date], today, date >= semesterStart, onOpenDay)
                                 }
                             }
                             repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
@@ -222,12 +223,12 @@ private fun CalendarMarker(mark: CalendarMark, color: Color, modifier: Modifier 
 }
 
 @Composable
-private fun DayCell(date: LocalDate, summary: DaySummary?, today: LocalDate, onOpenDay: (LocalDate) -> Unit) {
+private fun DayCell(date: LocalDate, summary: DaySummary?, today: LocalDate, enabled: Boolean, onOpenDay: (LocalDate) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val weekend = date.dayOfWeek in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)
     val holiday = summary?.holiday == true
     val differentTimetable = summary != null && summary.kind != DayKind.REGULAR
-    val isToday = date == today
+    val isToday = enabled && date == today
     val mark = when {
         holiday -> CalendarMark.HOLIDAY
         summary?.complete == true -> CalendarMark.MARKED
@@ -245,12 +246,12 @@ private fun DayCell(date: LocalDate, summary: DaySummary?, today: LocalDate, onO
         CalendarMark.INCOMPLETE -> R.string.periods_not_marked
         else -> if (weekend) R.string.weekend else R.string.no_marked_periods
     })
-    val description = if (differentTimetable) {
+    val description = if (!enabled) stringResource(R.string.before_semester_start) else if (differentTimetable) {
         stringResource(R.string.calendar_status_with_timetable, status)
     } else status
     Box(
         Modifier.size(48.dp).clip(CircleShape).background(background)
-            .clickable(role = Role.Button) { onOpenDay(date) }
+            .clickable(enabled = enabled, role = Role.Button) { onOpenDay(date) }
             .testTag("day_cell_$date").semantics {
                 contentDescription = date.long()
                 stateDescription = description
@@ -259,6 +260,7 @@ private fun DayCell(date: LocalDate, summary: DaySummary?, today: LocalDate, onO
     ) {
         Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyMedium,
             color = when {
+                !enabled -> colors.onSurface.copy(alpha = 0.38f)
                 isToday -> colors.onPrimary
                 holiday || weekend -> colors.onSurfaceVariant
                 else -> colors.onSurface

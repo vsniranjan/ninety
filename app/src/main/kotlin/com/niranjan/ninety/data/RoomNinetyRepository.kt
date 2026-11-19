@@ -62,7 +62,7 @@ private fun SessionRow.toFact(): PeriodFact = PeriodFact(
     mapOutcome(outcomeKind, outcomeDlStatus), counting, cancelled || suppressed, holiday)
 
 private fun SessionRow.toView(course: CourseEntity?): SessionView = SessionView(
-    UUID.fromString(id), UUID.fromString(courseId),
+    UUID.fromString(id), LocalDate.ofEpochDay(day), UUID.fromString(courseId),
     course?.name ?: "Course",
     course?.let { runCatching { CourseType.valueOf(it.type) }.getOrDefault(CourseType.OTHER) } ?: CourseType.OTHER,
     course?.colorArgb, slot, SessionOrigin.valueOf(origin), counting, startMinute, endMinute,
@@ -973,6 +973,21 @@ class RoomNinetyRepository(
                 check(journal.setOutcomeDlStatus(o.sessionId, eventId.toString(), status.name) == 1)
             }
             recordBatch("dl_status", batch)
+        }
+    }
+
+    override suspend fun removeDutyLeaveRequest(eventId: UUID) {
+        database.withTransaction {
+            val outcomes = journal.outcomesForEvent(eventId.toString()).filter { it.kind == "DL" }
+            if (outcomes.isEmpty()) return@withTransaction
+            val batch = BatchBuilder("Duty leave request removed")
+            // Keep the empty event so the journal can restore its links on Undo.
+            outcomes.forEach { outcome ->
+                batch.outcomes += outcome.image()
+                batch.expected["s:${outcome.sessionId}"] = checkNotNull(journal.session(outcome.sessionId)).revision
+                journal.deleteOutcome(outcome.sessionId)
+            }
+            recordBatch("dl_remove", batch)
         }
     }
 
