@@ -1,5 +1,6 @@
 package com.niranjan.ninety.ui
 
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -143,8 +144,11 @@ fun NinetyApp(appModel: AppViewModel) {
         !state.loaded -> LoadingScaffold()
         state.needsSetup || showSetup -> {
             val setupModel = ninetyViewModel<SetupViewModel>(key = "setup-$setupNonce") {
-                SetupViewModel(it.repository) }
-            SetupScreen(setupModel, onSaved = appModel::closeSetup,
+                SetupViewModel(it.repository, it.database, it.clock, it.reminders::reconcile) { message ->
+                    appModel.messages.value = message
+                }
+            }
+            SetupScreen(setupModel, currentSemester = state.activeSemester, settings = state.settings, onSaved = appModel::closeSetup,
                 onCancel = if (showSetup && !state.needsSetup) appModel::closeSetup else null)
         }
         // Saved back stacks from the five-tab graph contain routes that no longer exist.
@@ -171,6 +175,7 @@ private fun MainScaffold(appModel: AppViewModel) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val selectedTab = backStack?.tabIndex() ?: 0
     val viewed by appModel.viewedSemester.collectAsStateWithLifecycle()
     val appState by appModel.appState.collectAsStateWithLifecycle()
@@ -267,7 +272,7 @@ private fun MainScaffold(appModel: AppViewModel) {
                                 supportingText = when {
                                     id == appState.activeSemesterId -> stringResource(R.string.current_semester)
                                     semester.entity.archived -> stringResource(R.string.finished)
-                                    else -> null
+                                    else -> stringResource(R.string.paused_semester)
                                 },
                                 modifier = Modifier.testTag("switch_semester_$id"),
                             )
@@ -281,7 +286,11 @@ private fun MainScaffold(appModel: AppViewModel) {
         }
         val canSwitch = appState.semesters.size > 1
         val semesterLabel = viewed?.entity?.name?.let { name ->
-            if (archived) stringResource(R.string.semester_name_finished, name) else name
+            when {
+                archived -> stringResource(R.string.semester_name_finished, name)
+                semesterId != appState.activeSemesterId -> stringResource(R.string.semester_paused_summary, name)
+                else -> name
+            }
         } ?: if (canSwitch) stringResource(R.string.switch_semester) else null
         val title = when (currentRoute) {
             ROUTE_COURSES -> R.string.courses
@@ -332,7 +341,11 @@ private fun MainScaffold(appModel: AppViewModel) {
                             if (backStack?.isDatedDay == true ||
                                 currentRoute in listOf(ROUTE_TIMETABLE, ROUTE_COURSE, ROUTE_LEAVE, ROUTE_SEMESTER)) {
                                 ActionIcon(R.drawable.ic_back, stringResource(R.string.back), {
-                                    leaveCurrentScreen { nav.popBackStack() }
+                                    if (currentRoute == ROUTE_SEMESTER && backDispatcher != null) {
+                                        backDispatcher.onBackPressed()
+                                    } else {
+                                        leaveCurrentScreen { nav.popBackStack() }
+                                    }
                                 })
                             }
                         },

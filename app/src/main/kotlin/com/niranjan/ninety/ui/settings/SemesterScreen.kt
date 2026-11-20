@@ -1,14 +1,17 @@
 package com.niranjan.ninety.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
@@ -27,7 +30,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.niranjan.ninety.R
+import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.ui.designsystem.ActionRow
+import com.niranjan.ninety.ui.designsystem.CollegeZoneAction
+import com.niranjan.ninety.ui.designsystem.CollegeZonePicker
 import com.niranjan.ninety.ui.designsystem.ConfirmDialog
 import com.niranjan.ninety.ui.designsystem.EmptyState
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
@@ -42,6 +48,8 @@ fun SemesterScreen(id: UUID, snackbar: SnackbarHostState, onViewSemester: () -> 
     val model = ninetyViewModel<SettingsViewModel> { SettingsViewModel(it) }
     val state by model.appState.collectAsStateWithLifecycle()
     val message by model.messages.collectAsStateWithLifecycle()
+    val editError by model.semesterEditError.collectAsStateWithLifecycle()
+    val saving by model.savingSemester.collectAsStateWithLifecycle()
     val displayedMessage = message?.let { displayMessage(it) }
     LaunchedEffect(message) { displayedMessage?.let { snackbar.showSnackbar(it); model.dismissMessages() } }
     val semester = state.semesters.firstOrNull { it.entity.id == id.toString() }
@@ -53,22 +61,26 @@ fun SemesterScreen(id: UUID, snackbar: SnackbarHostState, onViewSemester: () -> 
     val current = state.activeSemesterId == id
     var confirmFinish by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
+    if (editing) {
+        EditSemester(semester.entity.name, semester.semester.startDate, semester.entity.collegeZone,
+            saving, editError?.let { displayMessage(it) }, onEdit = model::clearSemesterEditError,
+            onSave = { name, date, zone -> model.updateSemester(semester, name, date, zone) { editing = false } },
+            onDismiss = { if (!saving) editing = false })
+        return
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp)) {
         Text(semester.entity.name, style = MaterialTheme.typography.headlineSmall)
-        val started = stringResource(R.string.semester_started, semester.semester.startDate.medium())
-        Text(when {
-            archived -> stringResource(R.string.semester_started_finished, started)
-            current -> stringResource(R.string.semester_current_started, started)
-            else -> started
-        }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 16.dp))
-        ActionRow(R.drawable.ic_calendar, stringResource(R.string.view), onViewSemester,
+        Text(semesterSummary(semester, current), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 16.dp))
+        ActionRow(R.drawable.ic_calendar, stringResource(R.string.view_records), onViewSemester,
             modifier = Modifier.testTag("browse_$id"))
-        ActionRow(R.drawable.ic_edit, stringResource(R.string.edit_semester), { editing = true })
+        ActionRow(R.drawable.ic_edit, stringResource(R.string.edit_semester), {
+            model.clearSemesterEditError()
+            editing = true
+        })
         if (!current && !archived) {
             ActionRow(R.drawable.ic_check, stringResource(R.string.make_current), {
-                model.activateSemester(semester)
-                onActiveChanged()
+                model.activateSemester(semester, onActiveChanged)
             })
         }
         if (current || archived) {
@@ -76,11 +88,12 @@ fun SemesterScreen(id: UUID, snackbar: SnackbarHostState, onViewSemester: () -> 
                 stringResource(if (archived) R.string.reopen else R.string.finish_semester),
                 onClick = {
                     if (archived) {
-                        model.completeSemester(semester, false)
-                        onActiveChanged()
+                        model.completeSemester(semester, false, onActiveChanged)
                     } else confirmFinish = true
                 },
-                modifier = Modifier.testTag("semester_lifecycle_$id"))
+                modifier = Modifier.testTag("semester_lifecycle_$id"),
+                supportingText = if (archived && state.activeSemesterId != null)
+                    stringResource(R.string.reopen_requires_no_current) else null)
         }
     }
     if (confirmFinish) {
@@ -89,35 +102,61 @@ fun SemesterScreen(id: UUID, snackbar: SnackbarHostState, onViewSemester: () -> 
             onConfirm = { model.completeSemester(semester, true); confirmFinish = false },
             onDismiss = { confirmFinish = false })
     }
-    if (editing) {
-        EditSemesterDialog(semester.entity.name, semester.semester.startDate,
-            onSave = { name, date -> model.updateSemester(semester, name, date) { editing = false } },
-            onDismiss = { editing = false })
+}
+
+@Composable
+internal fun semesterSummary(semester: SemesterInfo, current: Boolean): String {
+    val started = stringResource(R.string.semester_started, semester.semester.startDate.medium())
+    val finished = semester.entity.completedDay?.let(LocalDate::ofEpochDay)
+    return when {
+        semester.entity.archived && finished != null ->
+            stringResource(R.string.semester_started_finished_on, started, finished.medium())
+        semester.entity.archived -> stringResource(R.string.semester_name_finished, started)
+        current -> stringResource(R.string.semester_current_started, started)
+        else -> stringResource(R.string.semester_paused_summary, started)
     }
 }
 
 @Composable
-private fun EditSemesterDialog(originalName: String, originalDate: LocalDate,
-    onSave: (String, LocalDate) -> Unit, onDismiss: () -> Unit) {
+private fun EditSemester(originalName: String, originalDate: LocalDate, originalZone: String,
+    saving: Boolean, error: String?, onEdit: () -> Unit, onSave: (String, LocalDate, String) -> Unit,
+    onDismiss: () -> Unit) {
     var name by rememberSaveable { mutableStateOf(originalName) }
+    var zone by rememberSaveable { mutableStateOf(originalZone) }
     var startDay by rememberSaveable { mutableLongStateOf(originalDate.toEpochDay()) }
     var pickStart by rememberSaveable { mutableStateOf(false) }
+    var pickZone by rememberSaveable { mutableStateOf(false) }
+    if (pickZone) {
+        CollegeZonePicker(zone, onSelect = {
+            zone = it
+            onEdit()
+            pickZone = false
+        }, onDismiss = { pickZone = false })
+        return
+    }
+
     val date = LocalDate.ofEpochDay(startDay)
-    AlertDialog(onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.edit_semester)) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.semester_name)) }, singleLine = true)
-                ActionRow(R.drawable.ic_calendar, stringResource(R.string.semester_started, date.medium()),
-                    { pickStart = true }, showChevron = true)
+    BackHandler(onBack = onDismiss)
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.edit_semester_heading), style = MaterialTheme.typography.headlineSmall)
+        OutlinedTextField(name, { name = it; onEdit() }, modifier = Modifier.fillMaxWidth(), enabled = !saving,
+            label = { Text(stringResource(R.string.semester_name)) }, singleLine = true)
+        ActionRow(R.drawable.ic_calendar, stringResource(R.string.semester_edit_start_date, date.medium()),
+            { if (!saving) pickStart = true }, showChevron = true,
+            supportingText = stringResource(R.string.semester_start_history_help))
+        CollegeZoneAction(zone, showPhoneSummary = false, enabled = !saving, onClick = { pickZone = true })
+        if (error != null) {
+            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onDismiss, enabled = !saving, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.cancel))
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(name, date) }, enabled = name.isNotBlank(),
+            Button(onClick = { onSave(name, date, zone) }, enabled = !saving && name.isNotBlank(),
                 modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
-    if (pickStart) NinetyDatePicker(date, onPicked = { startDay = it.toEpochDay(); pickStart = false },
+        }
+    }
+    if (pickStart) NinetyDatePicker(date, onPicked = { startDay = it.toEpochDay(); pickStart = false; onEdit() },
         onDismiss = { pickStart = false })
 }

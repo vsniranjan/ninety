@@ -25,6 +25,7 @@ internal fun displayMessage(message: String): String {
         "The first logging date is locked once attendance is recorded." -> R.string.balance_date_locked
         "Unknown opening balance." -> R.string.before_tracking_unavailable
         "No pending opening duty leave to resolve." -> R.string.no_pending_before_tracking
+        "Another semester is already active." -> R.string.reopen_requires_no_current
         "Only the active semester can be marked done." -> R.string.only_finish_current
         "Retired courses cannot stay on the timetable." -> R.string.stopped_course_timetable
         "This period is marked not conducted." -> R.string.class_not_held

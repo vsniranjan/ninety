@@ -44,10 +44,8 @@ class AppJourneyDeviceTest {
         val semesterName = "Device Test $suffix"
 
         // --- Gate: fresh install shows setup; re-runs enter it via Settings. ---
-        val alreadyHasSemester = withTimeout(15_000) {
-            repo.observeAppState().first { it.loaded }
-        }.semesters.isNotEmpty()
-        if (alreadyHasSemester) {
+        val initialState = withTimeout(15_000) { repo.observeAppState().first { it.loaded } }
+        if (initialState.semesters.isNotEmpty()) {
             rule.waitUntil(10_000) { exists("tab_settings") }
             rule.onNodeWithTag("tab_settings").activate()
             rule.waitUntil(10_000) { exists("new_semester") }
@@ -74,14 +72,15 @@ class AppJourneyDeviceTest {
         }
         val weekday = if (collegeDay) today.dayOfWeek.value else 1
         rule.onNodeWithTag("weekday_$weekday").performScrollTo().activate()
-        assignSlot(slot = 1, courseName = "Operating Systems")
-        assignSlot(slot = 3, courseName = "Networks Lab")
-        assignSlot(slot = 4, courseName = "Networks Lab")
-        assignSlot(slot = 5, courseName = "Networks Lab")
+        armCourse("Operating Systems")
+        assignSlot(1)
+        armCourse("Networks Lab")
+        listOf(3, 4, 5).forEach(::assignSlot)
         rule.onNodeWithTag("setup_action").performScrollTo().activate()   // Continue → review
 
         // --- Step 3: review and save. ---
         rule.onNodeWithText("Start tracking").performScrollTo().activate()
+        if (initialState.activeSemesterId != null) rule.onNodeWithText("Finish semester").activate()
         rule.waitUntil(20_000) { exists("day_title") }
 
         val semesterId = withTimeout(15_000) {
@@ -215,14 +214,13 @@ class AppJourneyDeviceTest {
         }
     }
 
+    private fun armCourse(courseName: String) {
+        rule.onNode(hasTestTag("timetable_course_chip") and hasText(courseName)).performScrollTo().activate()
+    }
+
     /** Period rows for the selected weekday are ordered P1–P6. */
-    private fun assignSlot(slot: Int, courseName: String) {
+    private fun assignSlot(slot: Int) {
         rule.onAllNodesWithTag("setup_slot")[slot - 1].performScrollTo().activate()
-        // The same name may also appear on a previously assigned period row.
-        val item = hasText(courseName, substring = false) and hasClickAction() and
-            !hasTestTag("setup_slot") and !hasAnyAncestor(hasTestTag("setup_slot"))
-        rule.waitUntil(5_000) { rule.onAllNodes(item).fetchSemanticsNodes().isNotEmpty() }
-        rule.onAllNodes(item).onFirst().activate()
     }
 
     /** Use the exposed UI action directly; MIUI can drop injected touch on a clipped node. */

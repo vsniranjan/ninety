@@ -178,8 +178,12 @@ class RedesignDeviceTest {
         ui.waitUntil(10_000) { ui.onAllNodesWithTag("setup_slot").fetchSemanticsNodes().isNotEmpty() }
         capture("phone-light-setup-timetable")
         ui.onNodeWithTag("setup_action").performScrollTo().performClick()
+        ui.onNodeWithText("Your timetable is empty").assertIsDisplayed()
+        ui.onNodeWithText("Skip for now").performClick()
+        ui.onNodeWithText("Not on the weekly timetable").assertIsDisplayed()
         capture("phone-light-setup-review")
         ui.onNodeWithContentDescription("Cancel setup").performScrollTo().performClick()
+        ui.onNodeWithTag("confirm_action").performClick()
         assertEquals(1, repo.observeAppState().first { it.loaded }.semesters.size)
     }
 

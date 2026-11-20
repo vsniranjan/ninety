@@ -9,6 +9,7 @@ import com.niranjan.ninety.ui.guard
 import com.niranjan.ninety.ui.userMessage
 import java.time.LocalDate
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,17 +44,37 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     private fun reminderOn() = appState.value.settings.reminderEnabled
     private fun reminderMinute() = appState.value.settings.reminderMinute
 
-    fun updateSemester(info: SemesterInfo, name: String, startDate: LocalDate, onSaved: () -> Unit) = act {
-        repository.updateSemester(UUID.fromString(info.entity.id), name, startDate, info.entity.collegeZone)
+    val semesterEditError = MutableStateFlow<String?>(null)
+    val savingSemester = MutableStateFlow(false)
+
+    fun updateSemester(info: SemesterInfo, name: String, startDate: LocalDate, zoneId: String, onSaved: () -> Unit) {
+        if (savingSemester.value) return
+        savingSemester.value = true
+        semesterEditError.value = null
+        viewModelScope.launch {
+            try {
+                repository.updateSemester(UUID.fromString(info.entity.id), name, startDate, zoneId)
+                onSaved()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                semesterEditError.value = error.userMessage()
+            } finally {
+                savingSemester.value = false
+            }
+        }
+    }
+
+    fun clearSemesterEditError() { semesterEditError.value = null }
+
+    fun completeSemester(info: SemesterInfo, completed: Boolean, onSaved: () -> Unit = {}) = act {
+        repository.setSemesterCompleted(UUID.fromString(info.entity.id), completed)
         onSaved()
     }
 
-    fun completeSemester(info: SemesterInfo, completed: Boolean) = act {
-        repository.setSemesterCompleted(UUID.fromString(info.entity.id), completed)
-    }
-
-    fun activateSemester(info: SemesterInfo) = act {
+    fun activateSemester(info: SemesterInfo, onSaved: () -> Unit) = act {
         repository.setActiveSemester(UUID.fromString(info.entity.id))
+        onSaved()
     }
 
     fun exportBackup(onWritten: () -> Unit, writeBytes: suspend (ByteArray) -> Unit) {

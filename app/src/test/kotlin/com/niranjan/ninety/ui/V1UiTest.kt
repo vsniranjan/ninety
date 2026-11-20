@@ -266,6 +266,30 @@ class V1UiTest {
         compose.waitUntil(10_000) { exists("day_title") }
     }
 
+    @Test fun semesterSettingsCanRenameAndSearchTheFullTimezoneList(): Unit = runBlocking {
+        compose.waitUntil(15_000) { exists("tab_settings") }
+        compose.onNodeWithTag("tab_settings").performClick()
+        openSemester()
+        compose.onNodeWithText("View records").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Rename or change start date or timezone").performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("The start date must preserve existing attendance history.").assertExists()
+        compose.onNode(hasSetTextAction() and hasText("Semester name")).performTextReplacement("Renamed semester")
+        compose.onNodeWithText("Change", substring = true).performScrollTo().performClick()
+        compose.onNodeWithText("Search timezones").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back", substring = false).performClick()
+        compose.onNodeWithText("Edit semester").assertIsDisplayed()
+        compose.onNodeWithText("Change", substring = true).performScrollTo().performClick()
+        compose.onNodeWithText("Search timezones").performTextInput("Chatham")
+        compose.onNodeWithText("Pacific/Chatham").performClick()
+        compose.onNodeWithText("Save", substring = false).performClick()
+        val updated = withTimeout(10_000) {
+            repo.observeAppState().first { it.activeSemester?.entity?.name == "Renamed semester" }
+        }
+        assertEquals("Pacific/Chatham", updated.activeSemester?.entity?.collegeZone)
+        assertEquals(today, updated.activeSemester?.semester?.startDate)
+    }
+
     @Test fun browsedSemesterBannerPersistsAcrossTabsAndExitsInOneTap() {
         compose.waitUntil(15_000) { exists("tab_settings") }
         val banner = "exit_browsed_semester"
@@ -420,6 +444,28 @@ class V1UiTest {
         })
     }
 
+    @Test fun stoppedCoursesStayAvailableInACollapsedSection() {
+        compose.waitUntil(15_000) { exists("tab_courses") }
+        compose.onNodeWithTag("tab_courses").performClick()
+        val courseRow = "course_row_$labId"
+        compose.waitUntil(10_000) { exists(courseRow) }
+        compose.onNodeWithTag(courseRow).performClick()
+        compose.onNodeWithTag("course_detail").performScrollToNode(hasTestTag("course_stop"))
+        compose.onNodeWithTag("course_stop").performClick()
+        compose.onNodeWithText("You can’t undo this in the app.", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("confirm_action").performClick()
+
+        compose.onNodeWithTag("tab_courses").performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("No longer tracked").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag(courseRow).assertDoesNotExist()
+        compose.onNodeWithTag("courses_list").performScrollToNode(hasText("No longer tracked"))
+        compose.onNodeWithText("No longer tracked").performClick()
+        compose.onNodeWithTag("courses_list").performScrollToNode(hasTestTag(courseRow))
+        compose.onNodeWithTag(courseRow).assertIsDisplayed()
+    }
+
     @Test fun timetablePromptsBeforeLeavingAnEditedDraft() {
         compose.waitUntil(15_000) { exists("tab_courses") }
         compose.onNodeWithTag("tab_courses").performClick()
@@ -429,8 +475,22 @@ class V1UiTest {
         compose.onNodeWithTag("timetable_edit").performClick()
         val weekday = today.dayOfWeek.takeIf { it.value <= 5 } ?: DayOfWeek.MONDAY
         compose.onNodeWithTag("weekday_${weekday.value}").assertIsSelected()
-        compose.onAllNodesWithTag("slot_cell").onFirst().performScrollTo().performClick()
-        compose.onNode(hasText("Free") and hasAnyAncestor(isPopup())).performClick()
+        val courseChip = compose.onNode(hasTestTag("timetable_course_chip") and hasText("Networks Lab"))
+        courseChip.performScrollTo().performClick().assertIsSelected()
+        val firstPeriod = compose.onAllNodesWithTag("slot_cell").onFirst()
+        firstPeriod.performScrollTo().performClick()
+        firstPeriod.assert(hasText("Networks Lab"))
+        firstPeriod.performClick()
+        firstPeriod.assert(hasText("Free"))
+
+        val destination = if (weekday == DayOfWeek.FRIDAY) DayOfWeek.MONDAY else DayOfWeek.FRIDAY
+        compose.onNodeWithTag("weekday_${destination.value}").performScrollTo().performClick()
+        compose.onNodeWithText("Copy from…").performScrollTo().performClick()
+        compose.onNode(hasText(weekday.fullName()) and hasAnyAncestor(isPopup())).performClick()
+        firstPeriod.assert(hasText("Free"))
+        compose.onNodeWithContentDescription("Choose course for period 1").performScrollTo().performClick()
+        compose.onNode(hasText("Networks Lab") and hasAnyAncestor(isPopup())).performClick()
+        firstPeriod.assert(hasText("Networks Lab"))
 
         compose.onNodeWithTag("timetable_cancel").performScrollTo().performClick()
         compose.onNodeWithText("Discard timetable changes?").assertIsDisplayed()

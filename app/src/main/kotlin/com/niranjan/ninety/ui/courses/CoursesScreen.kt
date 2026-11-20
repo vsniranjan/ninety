@@ -153,10 +153,11 @@ fun CoursesScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate, 
         val stopped = list.filter { it.course.retired }
         if (stopped.isNotEmpty()) {
             item {
+                val sectionState = stringResource(if (showStopped) R.string.section_expanded else R.string.section_collapsed)
                 ActionRow(if (showStopped) R.drawable.ic_minus else R.drawable.ic_chevron_down,
                     stringResource(R.string.no_longer_tracked), { showStopped = !showStopped },
                     modifier = Modifier.semantics {
-                        stateDescription = if (showStopped) "Expanded" else "Collapsed"
+                        stateDescription = sectionState
                     })
             }
             if (showStopped) items(stopped, key = { it.course.id }) { item ->
@@ -228,7 +229,7 @@ fun CourseDetailScreen(semesterId: UUID, courseId: String, today: LocalDate, sna
             ActionRow(R.drawable.ic_history, stringResource(R.string.attendance_before_tracking_action),
                 { dialog = CourseDialog.Balance }, modifier = Modifier.testTag("course_balance"))
             if (!item.course.retired) ActionRow(R.drawable.ic_remove, stringResource(R.string.stop_tracking_course),
-                { dialog = CourseDialog.Retire }, modifier = Modifier.testTag("course_stop"))
+                { dialog = CourseDialog.StopTracking }, modifier = Modifier.testTag("course_stop"))
         }
         val dates = summary.incompleteDates.sortedDescending()
         if (dates.isNotEmpty()) {
@@ -250,7 +251,7 @@ fun CourseDetailScreen(semesterId: UUID, courseId: String, today: LocalDate, sna
             onSave = { input -> model.updateCourse(UUID.fromString(courseId), input); dialog = null })
         CourseDialog.Balance -> BalanceDialog(item, onDismiss = { dialog = null },
             onSave = { model.correctBalance(it); dialog = null })
-        CourseDialog.Retire -> ConfirmDialog(stringResource(R.string.stop_tracking_question, item.course.name),
+        CourseDialog.StopTracking -> ConfirmDialog(stringResource(R.string.stop_tracking_question, item.course.name),
             stringResource(R.string.stop_tracking_body), stringResource(R.string.stop_tracking_course), destructive = true,
             onConfirm = { model.retireCourse(UUID.fromString(courseId)); dialog = null },
             onDismiss = { dialog = null })
@@ -258,7 +259,7 @@ fun CourseDetailScreen(semesterId: UUID, courseId: String, today: LocalDate, sna
     }
 }
 
-private enum class CourseDialog { Edit, Balance, Retire }
+private enum class CourseDialog { Edit, Balance, StopTracking }
 
 @Composable
 private fun CourseMessages(model: CoursesViewModel, snackbar: SnackbarHostState) {

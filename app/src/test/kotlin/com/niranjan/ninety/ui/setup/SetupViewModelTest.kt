@@ -10,11 +10,11 @@ import java.time.DayOfWeek as JDayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -50,7 +50,7 @@ class SetupViewModelTest {
     }
 
     private fun validModel(): SetupViewModel {
-        val model = SetupViewModel(repository)
+        val model = SetupViewModel(repository, db, clock)
         model.setSemesterName("Semester 5")
         model.setStartDate(LocalDate.of(2025, 1, 6))
         model.setZone(zone.id)
@@ -61,7 +61,7 @@ class SetupViewModelTest {
         CourseDraft(name = name, type = CourseType.THEORY)
 
     @Test fun semesterStepRequiresFields() = runTest(dispatcher) {
-        val model = SetupViewModel(repository)
+        val model = SetupViewModel(repository, db, clock)
         model.next()
         assertNotNull(model.state.value.error)
         model.setSemesterName("Sem")
@@ -106,8 +106,146 @@ class SetupViewModelTest {
         val course = draft()
         model.addCourse(course)
         model.assign(JDayOfWeek.MONDAY, 1, course.id)
-        model.removeCourse(course.id)
+        val removed = model.removeCourse(course.id)!!
         assertTrue(model.state.value.timetable.isEmpty())
+        model.restoreCourse(removed)
+        assertEquals(course, model.state.value.courses.single())
+        assertEquals(course.id, model.state.value.timetable[JDayOfWeek.MONDAY to 1])
+    }
+
+    @Test fun midsemesterChoicePrefillsCollegeTodayAndLetsUsersMarkPastDays() = runTest(dispatcher) {
+        val model = validModel()
+        val today = LocalDate.of(2025, 1, 8)
+        model.setStartDate(today.minusDays(3))
+        assertFalse(model.state.value.asksAboutPastAttendance(today))
+        model.setStartDate(today.minusDays(4))
+        val course = draft()
+        assertTrue(model.state.value.asksAboutPastAttendance(today))
+        assertEquals(today.toString(), model.state.value.courseForSetup(course, today).loggingDate)
+
+        model.setEnterAttendanceSoFar(false)
+        val previouslyEntered = course.copy(loggingDate = today.toString(), conducted = "3", present = "2")
+        val manual = model.state.value.courseForSetup(previouslyEntered, today)
+        assertEquals("", manual.loggingDate)
+        assertFalse(manual.hasBalance)
+        model.setEnterAttendanceSoFar(true)
+        assertEquals(previouslyEntered, model.state.value.courseForSetup(previouslyEntered, today))
+    }
+
+    @Test fun attendanceSoFarStartsDatedTrackingTodayEvenWithZeroCounts() = runTest(dispatcher) {
+        val model = validModel()
+        val today = LocalDate.of(2025, 1, 8)
+        model.setStartDate(today.minusWeeks(1))
+        val course = draft()
+        model.addCourse(course)
+        model.assign(JDayOfWeek.MONDAY, 1, course.id)
+        model.save()
+        model.state.first { !it.saving }
+
+        val semesterId = repository.observeAppState().first().activeSemesterId!!
+        repository.ensureMaterialized(semesterId)
+        assertEquals(today, repository.observeCourseStats(semesterId, today).first().single().balance.loggingStartDate)
+        assertTrue(repository.observeIncompleteDates(semesterId, today).first().isEmpty())
+    }
+
+    @Test fun emptyTimetableRequiresAnExplicitSkip() = runTest(dispatcher) {
+        val model = validModel()
+        model.addCourse(draft())
+        model.next()
+        model.next()
+        model.next()
+        assertEquals(2, model.state.value.step)
+        assertTrue(model.state.value.confirmEmptyTimetable)
+
+        model.dismissEmptyTimetable()
+        assertEquals(2, model.state.value.step)
+        assertFalse(model.state.value.confirmEmptyTimetable)
+
+        model.next()
+        model.skipEmptyTimetable()
+        assertEquals(3, model.state.value.step)
+        assertFalse(model.state.value.confirmEmptyTimetable)
+    }
+
+    @Test fun creatingReplacementFinishesThePreviousSemesterWhenSelected() = runTest(dispatcher) {
+        val first = validModel()
+        first.addCourse(draft())
+        first.save()
+        first.state.first { !it.saving }
+        val previousId = repository.observeAppState().first().activeSemesterId!!
+
+        val replacement = validModel()
+        replacement.setSemesterName("Semester 6")
+        replacement.addCourse(draft())
+        replacement.save(finishPrevious = previousId)
+        replacement.state.first { !it.saving }
+
+        val state = repository.observeAppState().first()
+        assertEquals("Semester 6", state.activeSemester?.entity?.name)
+        assertTrue(state.semesters.single { it.entity.id == previousId.toString() }.entity.archived)
+    }
+
+    @Test fun creatingReplacementCanKeepThePreviousSemesterPaused() = runTest(dispatcher) {
+        val first = validModel()
+        first.addCourse(draft())
+        first.save()
+        first.state.first { !it.saving }
+        val previousId = repository.observeAppState().first().activeSemesterId!!
+
+        val replacement = validModel()
+        replacement.setSemesterName("Semester 6")
+        replacement.addCourse(draft())
+        replacement.save()
+        replacement.state.first { !it.saving }
+
+        val state = repository.observeAppState().first()
+        assertEquals("Semester 6", state.activeSemester?.entity?.name)
+        assertFalse(state.semesters.single { it.entity.id == previousId.toString() }.entity.archived)
+        repository.setActiveSemester(previousId)
+        assertEquals(previousId, repository.observeAppState().first().activeSemesterId)
+    }
+
+    @Test fun failedReplacementLeavesThePreviousSemesterCurrent() = runTest(dispatcher) {
+        val first = validModel()
+        first.addCourse(draft())
+        first.save()
+        first.state.first { !it.saving }
+        val previousId = repository.observeAppState().first().activeSemesterId!!
+
+        val replacement = validModel()
+        replacement.setSemesterName("") // The repository rejects this after finishing the old semester.
+        replacement.addCourse(draft())
+        replacement.save(finishPrevious = previousId)
+        replacement.state.first { !it.saving }
+
+        assertNotNull(replacement.state.value.error)
+        val state = repository.observeAppState().first()
+        assertEquals(previousId, state.activeSemesterId)
+        assertFalse(state.semesters.single().entity.archived)
+    }
+
+    @Test fun optionalReminderKeepsExistingDisplayAndReminderTimePreferences() = runTest(dispatcher) {
+        val first = validModel()
+        first.addCourse(draft())
+        first.save()
+        first.state.first { !it.saving }
+        repository.updatePreferences("DARK", false, false, 1200)
+        val settings = repository.observeAppState().first().settings
+
+        val reconciled = CompletableDeferred<Unit>()
+        val model = SetupViewModel(repository, db, clock,
+            reconcileReminders = { reconciled.complete(Unit) })
+        model.setSemesterName("Semester 6")
+        model.setStartDate(LocalDate.of(2025, 1, 8))
+        model.setZone(zone.id)
+        model.addCourse(draft())
+        model.setEnableReminder(true)
+        model.save(settings = settings)
+
+        model.state.first { !it.saving }
+        assertTrue(model.state.value.saved)
+        reconciled.await()
+        assertEquals(settings.copy(reminderEnabled = true), repository.observeAppState().first().settings)
     }
 
     @Test fun savePersistsTheWholeSemester() = runTest(dispatcher) {
@@ -117,7 +255,7 @@ class SetupViewModelTest {
         model.assign(JDayOfWeek.MONDAY, 1, course.id)
         while (model.state.value.step < 3) model.next()
         model.save()
-        advanceUntilIdle()
+        model.state.first { !it.saving }
         val state = repository.observeAppState().first()
         assertEquals("Semester 5", state.activeSemester?.entity?.name)
         val stats = repository.observeCourseStats(

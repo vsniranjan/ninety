@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -30,7 +29,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberTimePickerState
@@ -51,7 +49,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -63,10 +60,10 @@ import com.niranjan.ninety.data.BackupCodec
 import com.niranjan.ninety.ui.courses.AttendanceRulesSheet
 import com.niranjan.ninety.ui.designsystem.ActionRow
 import com.niranjan.ninety.ui.designsystem.NinetyCard
+import com.niranjan.ninety.ui.designsystem.SettingSwitch
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.displayMessage
 import com.niranjan.ninety.ui.ninetyViewModel
-import com.niranjan.ninety.ui.short
 import java.time.Instant
 import java.util.UUID
 import java.time.LocalDate
@@ -123,10 +120,11 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
             }
         }
     }
+    val permissionMessage = stringResource(R.string.reminder_permission_denied)
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) model.setReminder(true)
-        else model.messages.value = "Notifications are off, so reminders can't be delivered."
+        else model.messages.value = permissionMessage
     }
 
     LaunchedEffect(message, info) {
@@ -139,13 +137,8 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
         SectionLabel(stringResource(R.string.semesters), Modifier.padding(top = 8.dp))
         state.semesters.forEach { semester ->
             val id = UUID.fromString(semester.entity.id)
-            val started = stringResource(R.string.semester_started, semester.semester.startDate.short())
             ActionRow(R.drawable.ic_calendar, semester.entity.name, { onOpenSemester(id) }, showChevron = true,
-                supportingText = when {
-                    semester.entity.archived -> stringResource(R.string.semester_started_finished, started)
-                    id == state.activeSemesterId -> stringResource(R.string.semester_current_started, started)
-                    else -> started
-                },
+                supportingText = semesterSummary(semester, id == state.activeSemesterId),
                 modifier = Modifier.testTag("open_semester_$id"))
         }
         ActionRow(R.drawable.ic_add, stringResource(R.string.new_semester), onNewSemester,
@@ -169,7 +162,7 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
                         }
                     }
                 }
-                SettingSwitch(stringResource(R.string.haptic_feedback), state.settings.haptics, model::setHaptics)
+                SettingSwitch(stringResource(R.string.haptic_feedback), state.settings.haptics, onChange = model::setHaptics)
             }
         }
 
@@ -293,15 +286,5 @@ fun SettingsScreen(snackbar: SnackbarHostState, onNewSemester: () -> Unit = {},
             },
             dismissButton = { TextButton(onClick = { pickTime = false }) { Text(stringResource(R.string.cancel)) } },
             text = { androidx.compose.material3.TimeInput(timeState) })
-    }
-}
-
-@Composable
-private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-        .toggleable(checked, role = Role.Switch, onValueChange = onChange),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        Switch(checked = checked, onCheckedChange = null)
     }
 }

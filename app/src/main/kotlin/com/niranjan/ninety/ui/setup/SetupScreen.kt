@@ -1,7 +1,12 @@
 package com.niranjan.ninety.ui.setup
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +17,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -19,13 +26,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,9 +43,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -46,45 +59,79 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.niranjan.ninety.R
+import com.niranjan.ninety.data.AppSettings
+import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.domain.CourseType
 import com.niranjan.ninety.ui.designsystem.ActionIcon
 import com.niranjan.ninety.ui.designsystem.ChoiceRow
+import com.niranjan.ninety.ui.designsystem.CollegeZoneAction
+import com.niranjan.ninety.ui.designsystem.CollegeZonePicker
+import com.niranjan.ninety.ui.designsystem.ConfirmDialog
 import com.niranjan.ninety.ui.designsystem.NinetyCard
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
 import com.niranjan.ninety.ui.designsystem.PeriodProgress
 import com.niranjan.ninety.ui.designsystem.PrimaryAction
 import com.niranjan.ninety.ui.designsystem.ScreenHeading
+import com.niranjan.ninety.ui.designsystem.SettingSwitch
 import com.niranjan.ninety.ui.designsystem.WeeklySchedule
 import com.niranjan.ninety.ui.medium
 import com.niranjan.ninety.ui.openingCountError
 import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
-
-private val ZONE_CHOICES = listOf("Asia/Kolkata", "Asia/Dubai", "Asia/Singapore",
-    "Europe/London", "Europe/Berlin", "America/New_York", "America/Los_Angeles",
-    "Australia/Sydney")
+import kotlinx.coroutines.launch
 
 @Composable
-fun SetupScreen(model: SetupViewModel, onSaved: () -> Unit = {}, onCancel: (() -> Unit)? = null) {
+fun SetupScreen(model: SetupViewModel, currentSemester: SemesterInfo? = null, settings: AppSettings = AppSettings(),
+    onSaved: () -> Unit = {}, onCancel: (() -> Unit)? = null) {
     val state by model.state.collectAsStateWithLifecycle()
+    val today = model.today(state.zoneId)
+    val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val undoLabel = stringResource(R.string.undo)
+    val removedMessage = stringResource(R.string.setup_course_removed)
+    val permissionMessage = stringResource(R.string.reminder_permission_denied)
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        model.setEnableReminder(granted)
+        if (!granted) scope.launch { snackbar.showSnackbar(permissionMessage) }
+    }
     val focus = LocalFocusManager.current
     val scroll = rememberScrollState()
     LaunchedEffect(state.step) { scroll.scrollTo(0) }
     var courseDialog by remember { mutableStateOf<CourseDraft?>(null) }
     var editingCourse by remember { mutableStateOf<CourseDraft?>(null) }
-    var pickStart by remember { mutableStateOf(false) }
+    var pickStart by rememberSaveable { mutableStateOf(false) }
+    var pickZone by rememberSaveable { mutableStateOf(false) }
+    var confirmFinish by rememberSaveable { mutableStateOf(false) }
 
-    androidx.activity.compose.BackHandler(enabled = state.step > 0 || onCancel != null) {
-        if (state.step > 0) model.back() else onCancel?.invoke()
+    var confirmCancel by rememberSaveable { mutableStateOf(false) }
+    val requestCancel: () -> Unit = {
+        if (state.hasDraft) confirmCancel = true else onCancel?.invoke()
+    }
+
+    BackHandler(enabled = state.step > 0 || onCancel != null) {
+        if (!state.saving) {
+            if (state.step > 0) model.back() else requestCancel()
+        }
     }
     LaunchedEffect(state.saved) { if (state.saved) onSaved() }
 
-    Scaffold { padding ->
+    if (pickZone) {
+        Scaffold { padding ->
+            CollegeZonePicker(state.zoneId, onSelect = { zone ->
+                model.setZone(zone)
+                pickZone = false
+            }, onDismiss = { pickZone = false }, modifier = Modifier.padding(padding))
+        }
+        return
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding().padding(horizontal = 24.dp)
             .verticalScroll(scroll)) {
             Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 24.dp),
@@ -93,19 +140,45 @@ fun SetupScreen(model: SetupViewModel, onSaved: () -> Unit = {}, onCancel: (() -
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text("${state.step + 1} / ${state.stepCount}", style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                onCancel?.let { cancel -> ActionIcon(R.drawable.ic_close, "Cancel setup", cancel) }
+                if (onCancel != null) {
+                    ActionIcon(R.drawable.ic_close, stringResource(R.string.cancel_setup), requestCancel,
+                        enabled = !state.saving)
+                }
             }
             PeriodProgress(state.step + 1, state.stepCount,
                 description = stringResource(R.string.setup_steps, state.step + 1, state.stepCount))
             ScreenHeading(stepTitle(state.step))
 
             when (state.step) {
-                0 -> SemesterStep(state, { pickStart = true },
-                    model::setSemesterName, model::setZone)
-                1 -> CoursesStep(state, onAdd = { courseDialog = CourseDraft() },
-                    onEdit = { editingCourse = it }, onRemove = model::removeCourse)
+                0 -> SemesterStep(state, today, { pickStart = true },
+                    model::setSemesterName, { pickZone = true }, model::setEnterAttendanceSoFar)
+                1 -> CoursesStep(state, today, onAdd = { courseDialog = CourseDraft() },
+                    onEdit = { editingCourse = it }, onRemove = { id ->
+                        model.removeCourse(id)?.let { removed ->
+                            scope.launch {
+                                val result = snackbar.showSnackbar(removedMessage, actionLabel = undoLabel,
+                                    duration = SnackbarDuration.Short)
+                                if (result == SnackbarResult.ActionPerformed) model.restoreCourse(removed)
+                            }
+                        }
+                    })
                 2 -> TimetableStep(state, model::copyDay, model::assign)
-                else -> ReviewStep(state)
+                else -> {
+                    ReviewStep(state, today)
+                    if (!settings.reminderEnabled) {
+                        Spacer(Modifier.height(12.dp))
+                        SettingSwitch(stringResource(R.string.daily_reminder), state.enableReminder,
+                            enabled = !state.saving) { enabled ->
+                            if (enabled && Build.VERSION.SDK_INT >= 33 &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                                != PackageManager.PERMISSION_GRANTED) {
+                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                model.setEnableReminder(enabled)
+                            }
+                        }
+                    }
+                }
             }
 
             state.error?.let {
@@ -116,13 +189,17 @@ fun SetupScreen(model: SetupViewModel, onSaved: () -> Unit = {}, onCancel: (() -
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                if (state.step > 0) ActionIcon(R.drawable.ic_back, "Back", { focus.clearFocus(); model.back() })
+                if (state.step > 0) ActionIcon(R.drawable.ic_back, "Back", { focus.clearFocus(); model.back() },
+                    enabled = !state.saving)
                 if (state.step < state.stepCount - 1) {
                     PrimaryAction("Continue", { focus.clearFocus(); model.next() }, icon = R.drawable.ic_arrow_right,
                         modifier = Modifier.weight(1f).testTag("setup_action"))
                 } else {
                     PrimaryAction(if (state.saving) "Saving…" else "Start tracking",
-                        { focus.clearFocus(); model.save() }, enabled = !state.saving,
+                        {
+                            focus.clearFocus()
+                            if (currentSemester == null) model.save(settings = settings) else confirmFinish = true
+                        }, enabled = !state.saving,
                         modifier = Modifier.weight(1f).testTag("setup_action"))
                 }
             }
@@ -132,17 +209,62 @@ fun SetupScreen(model: SetupViewModel, onSaved: () -> Unit = {}, onCancel: (() -
     }
 
     courseDialog?.let { draft ->
-        CourseDraftDialog(draft, state.courses, state.startDate, LocalDate.now(ZoneId.of(state.zoneId)),
+        CourseDraftDialog(if (state.offersAttendanceSoFar(today)) state.courseForSetup(draft, today) else draft,
+            state.courses, state.startDate, today,
+            allowBalance = state.offersAttendanceSoFar(today),
+            expandBalance = state.prefillsAttendanceSoFar(today),
             onSave = { model.addCourse(it); courseDialog = null },
             onDismiss = { courseDialog = null })
     }
     editingCourse?.let { draft ->
-        CourseDraftDialog(draft, state.courses, state.startDate, LocalDate.now(ZoneId.of(state.zoneId)),
+        CourseDraftDialog(if (state.offersAttendanceSoFar(today)) state.courseForSetup(draft, today) else draft,
+            state.courses, state.startDate, today,
+            allowBalance = state.offersAttendanceSoFar(today),
+            expandBalance = state.prefillsAttendanceSoFar(today),
             onSave = { model.updateCourse(it); editingCourse = null },
             onDismiss = { editingCourse = null })
     }
+    if (confirmCancel) {
+        ConfirmDialog(stringResource(R.string.discard_setup), stringResource(R.string.discard_setup_body),
+            stringResource(R.string.discard), onConfirm = {
+                confirmCancel = false
+                onCancel?.invoke()
+            }, onDismiss = { confirmCancel = false })
+    }
+    if (confirmFinish && currentSemester != null) {
+        AlertDialog(onDismissRequest = { confirmFinish = false },
+            title = { Text(stringResource(R.string.finish_semester_question, currentSemester.entity.name)) },
+            text = { Text(stringResource(R.string.finish_previous_semester_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmFinish = false
+                    model.save(UUID.fromString(currentSemester.entity.id), settings)
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.finish_semester)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    confirmFinish = false
+                    model.save(settings = settings)
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.keep_semester_paused)) }
+            })
+    }
+    if (state.confirmEmptyTimetable) {
+        AlertDialog(onDismissRequest = model::dismissEmptyTimetable,
+            title = { Text(stringResource(R.string.empty_timetable_title)) },
+            text = { Text(stringResource(R.string.empty_timetable_body)) },
+            confirmButton = {
+                TextButton(onClick = model::skipEmptyTimetable, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.skip_timetable))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = model::dismissEmptyTimetable, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.add_timetable_classes))
+                }
+            })
+    }
     if (pickStart) {
-        NinetyDatePicker(state.startDate ?: LocalDate.now(),
+        NinetyDatePicker(state.startDate ?: today,
             onPicked = { model.setStartDate(it); pickStart = false },
             onDismiss = { pickStart = false })
     }
@@ -156,10 +278,12 @@ private fun stepTitle(step: Int): String = when (step) {
 }
 
 @Composable
-private fun SemesterStep(state: SetupState, onPickDate: () -> Unit,
-    onName: (String) -> Unit, onZone: (String) -> Unit) {
+private fun SemesterStep(state: SetupState, today: LocalDate, onPickDate: () -> Unit,
+    onName: (String) -> Unit, onPickZone: () -> Unit, onPastAttendance: (Boolean) -> Unit) {
     val focus = LocalFocusManager.current
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.setup_intro), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(value = state.semesterName, onValueChange = onName,
             label = { Text("Semester name") }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -176,32 +300,27 @@ private fun SemesterStep(state: SetupState, onPickDate: () -> Unit,
                 ActionIcon(R.drawable.ic_calendar, "Semester start", onPickDate, modifier = Modifier.testTag("start_date"))
             }
         }
-        var zoneOpen by remember { mutableStateOf(false) }
-        NinetyCard(Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("College timezone", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(state.zoneId, style = MaterialTheme.typography.titleMedium)
-
-                }
-                Box {
-                    ActionIcon(R.drawable.ic_clock, "Change college timezone", { zoneOpen = true })
-                    DropdownMenu(expanded = zoneOpen, onDismissRequest = { zoneOpen = false }) {
-                        (listOf(state.zoneId) + ZONE_CHOICES + ZoneId.getAvailableZoneIds().sorted())
-                            .distinct().take(40).forEach { zone ->
-                            DropdownMenuItem(text = { Text(zone) },
-                                onClick = { zoneOpen = false; onZone(zone) })
-                        }
+        if (state.asksAboutPastAttendance(today)) {
+            Column(Modifier.selectableGroup()) {
+                Text(stringResource(R.string.setup_midsemester_question), style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                listOf(true to R.string.setup_enter_attendance, false to R.string.setup_mark_past_days).forEach { (enter, label) ->
+                    val selected = state.enterAttendanceSoFar == enter
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .selectable(selected, role = Role.RadioButton, onClick = { onPastAttendance(enter) }),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected, onClick = null, modifier = Modifier.padding(end = 12.dp))
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
         }
+        CollegeZoneAction(state.zoneId, onClick = onPickZone)
     }
 }
 
 @Composable
-private fun CoursesStep(state: SetupState, onAdd: () -> Unit,
+private fun CoursesStep(state: SetupState, today: LocalDate, onAdd: () -> Unit,
     onEdit: (CourseDraft) -> Unit, onRemove: (UUID) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         state.courses.forEach { course ->
@@ -214,8 +333,9 @@ private fun CoursesStep(state: SetupState, onAdd: () -> Unit,
                         Text(typeLabel(course.type),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (course.hasBalance) {
-                            val count = course.conducted.toLong()
+                        val recorded = state.courseForSetup(course, today)
+                        if (recorded.hasBalance) {
+                            val count = recorded.conducted.toLong()
                             Text(stringResource(R.string.before_tracking_for_course, stringResource(R.string.before_tracking),
                                 pluralStringResource(R.plurals.period_count, count.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), count)),
                                 style = MaterialTheme.typography.bodySmall,
@@ -246,7 +366,7 @@ private fun TimetableStep(state: SetupState, onCopy: (DayOfWeek, DayOfWeek) -> U
 }
 
 @Composable
-private fun ReviewStep(state: SetupState) {
+private fun ReviewStep(state: SetupState, today: LocalDate) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         NinetyCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -257,18 +377,36 @@ private fun ReviewStep(state: SetupState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(stringResource(R.string.setup_review_counts,
                     pluralStringResource(R.plurals.course_count, state.courses.size, state.courses.size),
-                    pluralStringResource(R.plurals.period_count, state.timetable.size, state.timetable.size)),
+                    pluralStringResource(R.plurals.periods_per_week, state.timetable.size, state.timetable.size)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        state.courses.forEach { course ->
-            Text(course.name, style = MaterialTheme.typography.bodyMedium)
-            if (course.hasBalance) {
-                Text(stringResource(R.string.before_tracking), style = MaterialTheme.typography.labelMedium)
-                Text(stringResource(R.string.course_before_tracking, course.present.toLong(),
-                    course.approvedDl.toLong(), course.pendingDl.toLong(), course.conducted.toLong()),
-                    style = MaterialTheme.typography.bodySmall)
+        val scheduledCourses = state.timetable.values.toSet()
+        state.courses.map { state.courseForSetup(it, today) }.forEach { course ->
+            Column {
+                Text(course.name, style = MaterialTheme.typography.bodyMedium)
+                if (course.id !in scheduledCourses) {
+                    Text(stringResource(R.string.course_not_on_timetable), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (course.loggingDate.isNotBlank()) {
+                    course.loggingDate.toLocalDateOrNull()?.let { date ->
+                        Text(stringResource(R.string.tracking_starts_on, date.medium()),
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (course.hasBalance) {
+                    val pending = course.pendingDl.toLong()
+                    val credited = course.present.toLong() + course.approvedDl.toLong() + pending
+                    Text(stringResource(R.string.setup_attendance_review, credited, course.conducted.toLong()),
+                        style = MaterialTheme.typography.bodySmall)
+                    if (pending > 0) {
+                        Text(pluralStringResource(R.plurals.setup_pending_attendance_review,
+                            pending.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), pending),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
     }
@@ -278,11 +416,12 @@ private fun ReviewStep(state: SetupState) {
 internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>, semesterStart: LocalDate?, today: LocalDate,
     onSave: (CourseDraft) -> Unit, onDismiss: () -> Unit,
     balanceLabel: Int = R.string.before_tracking, nameTag: String = "draft_name",
-    saveTag: String = "draft_save", saving: Boolean = false) {
+    saveTag: String = "draft_save", saving: Boolean = false,
+    allowBalance: Boolean = true, expandBalance: Boolean = false) {
     val focus = LocalFocusManager.current
     var draft by remember { mutableStateOf(existing) }
     var pickLogging by remember { mutableStateOf(false) }
-    var showBalance by remember { mutableStateOf(existing.hasBalance) }
+    var showBalance by remember { mutableStateOf(allowBalance && (expandBalance || existing.hasBalance)) }
     val nameError = when {
         draft.name.isBlank() -> R.string.course_name_required
         courses.any { it.id != draft.id && it.name.trim().lowercase(Locale.ROOT) ==
@@ -292,9 +431,9 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
     val logging = draft.loggingDate.toLocalDateOrNull()
     val countError = if (showBalance) openingCountError(draft.conducted.toLongOrNull(),
         draft.present.toLongOrNull(), draft.approvedDl.toLongOrNull(), draft.pendingDl.toLongOrNull()) else null
-    val dateError = if (showBalance && draft.hasBalance) when {
+    val dateError = if (showBalance && (expandBalance || draft.hasBalance)) when {
         logging == null -> R.string.choose_tracking_date
-        semesterStart != null && logging <= semesterStart -> R.string.tracking_date_after_start
+        semesterStart != null && (logging < semesterStart || (draft.hasBalance && logging == semesterStart)) -> R.string.tracking_date_after_start
         logging > today -> R.string.tracking_date_by_today
         else -> null
     } else null
@@ -314,12 +453,16 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
                     modifier = Modifier.fillMaxWidth().testTag(nameTag))
                 ChoiceRow(CourseType.entries.map { it.name to typeLabel(it) }, draft.type.name,
                     onSelect = { draft = draft.copy(type = CourseType.valueOf(it)) })
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .toggleable(value = showBalance, role = Role.Checkbox, onValueChange = { showBalance = it }),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = showBalance, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
-                    Text(stringResource(balanceLabel),
-                        style = MaterialTheme.typography.bodyMedium)
+                if (expandBalance) {
+                    Text(stringResource(R.string.attendance_so_far), style = MaterialTheme.typography.titleSmall)
+                } else if (allowBalance) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .toggleable(value = showBalance, role = Role.Checkbox, onValueChange = { showBalance = it }),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = showBalance, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+                        Text(stringResource(balanceLabel),
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
                 if (showBalance) {
                     TextButton(onClick = { pickLogging = true }, modifier = Modifier.heightIn(min = 48.dp)) {
@@ -353,7 +496,8 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(if (showBalance) draft else draft.copy(conducted = "0",
+                if (!allowBalance) onSave(existing.copy(name = draft.name, type = draft.type))
+                else onSave(if (showBalance) draft else draft.copy(conducted = "0",
                     present = "0", approvedDl = "0", pendingDl = "0"))
             }, enabled = !saving && nameError == null && countError == null && dateError == null,
                 modifier = Modifier.heightIn(min = 48.dp).testTag(saveTag)) { Text(stringResource(R.string.save)) }
@@ -362,7 +506,7 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
     if (pickLogging) {
         NinetyDatePicker(logging ?: semesterStart ?: today,
             onPicked = { draft = draft.copy(loggingDate = it.toString()); pickLogging = false },
-            onDismiss = { pickLogging = false }, minDate = semesterStart)
+            onDismiss = { pickLogging = false }, minDate = semesterStart, maxDate = today)
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -101,10 +102,16 @@ fun WeeklySchedule(template: WeekTemplate, names: Map<UUID, String>, editable: B
                     val name = assignedCourse?.let(names::get)
                     val free = stringResource(R.string.free_period)
                     val description = stringResource(R.string.period_description, day.fullName(), slot, name ?: free)
+                    val chooseCourse = stringResource(R.string.choose_course_for_period, slot)
+                    val clickLabel = when {
+                        armedCourse == null -> chooseCourse
+                        assignedCourse == armedCourse -> stringResource(R.string.clear_timetable_course, names.getValue(armedCourse))
+                        else -> stringResource(R.string.assign_timetable_course, names.getValue(armedCourse))
+                    }
                     var menu by remember(day) { mutableStateOf(false) }
                     Box {
                         Row(Modifier.fillMaxWidth().heightIn(min = 72.dp)
-                            .then(if (editable) Modifier.clickable {
+                            .then(if (editable) Modifier.clickable(role = Role.Button, onClickLabel = clickLabel) {
                                 if (armedCourse == null) menu = true
                                 else onAssign(day, slot, armedCourse.takeUnless { it == assignedCourse })
                             } else Modifier)
@@ -125,8 +132,7 @@ fun WeeklySchedule(template: WeekTemplate, names: Map<UUID, String>, editable: B
                                 color = if (name == null) MaterialTheme.colorScheme.onSurfaceVariant
                                     else MaterialTheme.colorScheme.onSurface)
                             if (armedCourse != null) {
-                                ActionIcon(R.drawable.ic_chevron_down,
-                                    stringResource(R.string.choose_course_for_period, slot), { menu = true })
+                                ActionIcon(R.drawable.ic_chevron_down, chooseCourse, { menu = true })
                             } else if (editable) Icon(painterResource(R.drawable.ic_forward), contentDescription = null,
                                 modifier = Modifier.size(20.dp).rotate(90f), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

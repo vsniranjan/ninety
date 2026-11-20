@@ -11,7 +11,7 @@
     <string name="semester_current_started">%1$s · Current</string>
     <string name="semester_unavailable">Semester unavailable</string>
     <string name="semester_name">Semester name</string>
-    <string name="edit_semester">Rename or change start date</string>
+    <string name="edit_semester">Rename or change start date or timezone</string>
     <string name="before_semester_start">Before the semester started</string>
     <string name="course_unavailable">Course unavailable</string>
     <string name="open_course">Open %1$s</string>
@@ -142,7 +142,7 @@
     <string name="no_longer_tracked">No longer tracked</string>
     <string name="stop_tracking_course">Stop tracking this course</string>
     <string name="stop_tracking_question">Stop tracking %1$s?</string>
-    <string name="stop_tracking_body">It comes off your timetable from tomorrow. Everything marked so far is kept.</string>
+    <string name="stop_tracking_body">It comes off your timetable from tomorrow. Everything marked so far is kept. You can’t undo this in the app.</string>
     <string name="counted_as_attended">Counted as attended: %1$d of %2$d</string>
     <string name="attended_in_person">Attended in person</string>
     <string name="without_pending_leave">Without pending duty leave</string>
@@ -208,7 +208,6 @@
     <string name="counts_exceed_held">Attended periods and duty leave together cannot exceed classes held.</string>
     <string name="absence_count">Absent: %1$d</string>
     <string name="before_tracking_for_course">%1$s · %2$s</string>
-    <string name="course_before_tracking" tools:ignore="PluralsCandidate">%1$d attended in person · %2$d approved duty leave · %3$d pending duty leave · %4$d periods held</string>
     <string name="setup_steps">Step %1$d of %2$d</string>
     <plurals name="period_progress">
         <item quantity="one">%1$d of %2$d period marked</item>
@@ -228,7 +227,7 @@
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
-    <string name="view">View</string>
+    <string name="view_records">View records</string>
     <string name="finish_semester">Finish semester</string>
     <string name="finish_semester_question">Finish %1$s?</string>
     <string name="finish_semester_body">You can still view it and reopen it.</string>
@@ -236,7 +235,7 @@
     <string name="current_semester">Current</string>
     <string name="make_current">Make current</string>
     <string name="semester_started">Started %1$s</string>
-    <string name="semester_started_finished">%1$s · Finished</string>
+    <string name="semester_started_finished_on">%1$s · Finished %2$s</string>
     <string name="save_backup">Save a backup</string>
     <string name="restore_backup">Restore from a backup</string>
     <string name="backup_saved">Backup saved</string>
@@ -341,4 +340,44 @@
     <string name="choose_course_for_period">Choose course for period %1$d</string>
     <string name="numbered_period">Period %1$d</string>
     <string name="extra_class">Extra class</string>
+    <string name="setup_intro">Three short steps: semester, courses, weekly timetable.</string>
+    <string name="setup_midsemester_question">Classes have already started. How do you want to begin?</string>
+    <string name="setup_enter_attendance">Enter my attendance so far (recommended)</string>
+    <string name="setup_mark_past_days">Mark every past day myself</string>
+    <string name="college_timezone">College timezone</string>
+    <string name="times_follow_phone">Times follow this phone · Change</string>
+    <string name="college_zone_change">%1$s · Change</string>
+    <string name="search_timezones">Search timezones</string>
+    <string name="no_timezones_found">No matching timezones</string>
+    <string name="selected_phone_timezone">This phone · Selected</string>
+    <string name="phone_timezone">This phone</string>
+    <string name="selected_timezone">Selected</string>
+    <string name="empty_timetable_title">Your timetable is empty</string>
+    <string name="empty_timetable_body">No classes will appear until you add them to the timetable.</string>
+    <string name="add_timetable_classes">Add classes</string>
+    <string name="skip_timetable">Skip for now</string>
+    <string name="course_not_on_timetable">Not on the weekly timetable</string>
+    <string name="semester_edit_start_date">Start date · %1$s</string>
+    <string name="semester_start_history_help">The start date must preserve existing attendance history.</string>
+    <string name="edit_college_zone">College timezone · %1$s · Change</string>
+    <string name="reopen_requires_no_current">Finish the current semester before reopening this one.</string>
+    <string name="finish_previous_semester_body">You can still view it. Choose Keep paused if you want to make it current again later.</string>
+    <string name="keep_semester_paused">Keep paused</string>
+    <string name="paused_semester">Paused</string>
+    <string name="semester_paused_summary">%1$s · Paused</string>
+    <string name="section_expanded">Expanded</string>
+    <string name="section_collapsed">Collapsed</string>
+    <string name="cancel_setup">Cancel setup</string>
+    <string name="discard_setup">Discard this setup?</string>
+    <string name="discard_setup_body">The semester draft will be discarded.</string>
+    <string name="setup_course_removed">Course removed from setup</string>
+    <string name="setup_attendance_review">Counted as attended so far · %1$d of %2$d</string>
+    <string name="reminder_permission_denied">Allow notifications to get attendance reminders.</string>
+    <plurals name="setup_pending_attendance_review">
+        <item quantity="one">Includes %1$d period of pending duty leave</item>
+        <item quantity="other">Includes %1$d periods of pending duty leave</item>
+    </plurals>
+    <string name="edit_semester_heading">Edit semester</string>
+    <string name="clear_timetable_course">Clear %1$s</string>
+    <string name="assign_timetable_course">Assign %1$s</string>
 </resources>
