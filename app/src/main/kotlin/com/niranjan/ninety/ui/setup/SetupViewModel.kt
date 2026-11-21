@@ -34,8 +34,7 @@ data class CourseDraft(
     val loggingDate: String = "",
     val conducted: String = "0",
     val present: String = "0",
-    val approvedDl: String = "0",
-    val pendingDl: String = "0",
+    val dutyLeave: String = "0",
 ) {
     val hasBalance: Boolean get() = (conducted.toLongOrNull() ?: 0L) > 0L
 }
@@ -70,7 +69,7 @@ data class SetupState(
 
     fun courseForSetup(course: CourseDraft, today: LocalDate): CourseDraft = when {
         !offersAttendanceSoFar(today) -> course.copy(loggingDate = "", conducted = "0", present = "0",
-            approvedDl = "0", pendingDl = "0")
+            dutyLeave = "0")
         prefillsAttendanceSoFar(today) && course.loggingDate.isBlank() -> course.copy(loggingDate = today.toString())
         else -> course
     }
@@ -171,7 +170,7 @@ class SetupViewModel(private val repository: NinetyRepository, private val datab
         s.courses.map { s.courseForSetup(it, today) }.forEach { c ->
             if (c.name.isBlank()) return "Enter a course name."
             if (openingCountError(c.conducted.toLongOrNull(), c.present.toLongOrNull(),
-                    c.approvedDl.toLongOrNull(), c.pendingDl.toLongOrNull()) != null) {
+                    c.dutyLeave.toLongOrNull()) != null) {
                 return "Check the counts for ${c.name}."
             }
             if (c.hasBalance || c.loggingDate.isNotBlank()) {
@@ -205,7 +204,7 @@ class SetupViewModel(private val repository: NinetyRepository, private val datab
                 val courses = s.courses.map { s.courseForSetup(it, today) }.map { c ->
                     val balance = if (c.hasBalance) {
                         OpeningBalance(c.id, c.loggingDate.toLocalDateOrNull()!!,
-                            c.conducted.toLong(), c.present.toLong(), c.approvedDl.toLong(), c.pendingDl.toLong())
+                            c.conducted.toLong(), c.present.toLong(), c.dutyLeave.toLong())
                     } else {
                         OpeningBalance(c.id, c.loggingDate.toLocalDateOrNull() ?: s.startDate!!)
                     }

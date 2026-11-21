@@ -11,9 +11,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.niranjan.ninety.AppContainer
 import com.niranjan.ninety.NinetyApplication
 import com.niranjan.ninety.data.AppState
-import com.niranjan.ninety.data.BackupException
 import com.niranjan.ninety.data.UndoResult
 import com.niranjan.ninety.data.UndoableAction
+import com.niranjan.ninety.data.UserFacingException
+import kotlinx.coroutines.CancellationException
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,8 +33,8 @@ inline fun <reified VM : ViewModel> ninetyViewModel(key: String? = null,
 }
 
 fun Throwable.userMessage(): String = when (this) {
-    is BackupException -> message ?: "This backup could not be used."
-    is IllegalArgumentException, is IllegalStateException -> message ?: "That change could not be applied."
+    is CancellationException -> throw this
+    is UserFacingException -> message
     else -> "Something went wrong. Your data is safe."
 }
 

@@ -92,14 +92,16 @@ class AppJourneyDeviceTest {
         assertEquals(today.toEpochDay(), saved.startDay)
 
         if (!collegeDay) {
-            // Weekend run: setup path still verified; no classes today.
-            rule.onNodeWithText("No classes on weekends", substring = true).assertExists()
-            return@runBlocking
+            // The setup fixture assigned Monday. Copy it through the UI on weekends
+            // so the rest of the journey runs every day of the week.
+            rule.onNodeWithTag("day_menu").activate()
+            rule.onNodeWithText("Use another day's timetable…").activate()
+            rule.onNodeWithText("Monday").activate()
         }
 
         // --- Today shows the materialized day: theory row + 3-period lab card. ---
         rule.waitUntil(10_000) { exists("group_present") }
-        rule.onNodeWithText("3 periods").assertExists()
+        rule.onNodeWithContentDescription("View periods").assertExists()
         rule.onNodeWithText("Operating Systems", substring = true).assertExists()
         rule.onNodeWithText("Mark all present").assertIsDisplayed()
 
@@ -160,10 +162,10 @@ class AppJourneyDeviceTest {
         rule.onNodeWithTag("dl_confirm").activate()
         rule.waitUntil(10_000) { exists("confirm_action") }
         rule.onNodeWithText("Replace recorded attendance?").assertExists()
-        assertTrue(withTimeout(10_000) { repo.observeDlEvents(semesterId).first() }.isEmpty())
+        assertTrue(repo.observeCourseStats(semesterId, today).first().all { it.summary.dutyLeave == 0L })
         rule.onNodeWithTag("confirm_action").activate()
-        val leave = withTimeout(10_000) { repo.observeDlEvents(semesterId).first { it.size == 1 } }.single()
-        assertEquals(3, leave.pending)
+        await { repo.observeCourseStats(semesterId, today).first()
+            .single { it.course.name == "Networks Lab" }.summary.dutyLeave == 3L }
 
         // --- Tabs render with the recorded data. ---
         rule.onNodeWithTag("tab_courses").activate()
@@ -172,16 +174,6 @@ class AppJourneyDeviceTest {
         }
         rule.onNodeWithText("Networks Lab", substring = true).assertExists()
         rule.onNodeWithTag("tab_calendar").activate()
-        rule.onNodeWithTag("tab_courses").activate()
-        rule.onNodeWithTag("open_duty_leave").performScrollTo().activate()
-        rule.waitUntil(10_000) { exists("dl_expand_${leave.id}") }
-        rule.onNodeWithTag("dl_expand_${leave.id}").activate()
-        val period = withTimeout(10_000) { repo.observeDlEventSessions(leave.id).first { it.isNotEmpty() } }.first()
-        rule.waitUntil(10_000) { exists("dl_status_${period.id}") }
-        rule.onNodeWithTag("dl_status_${period.id}").performScrollTo().activate()
-        rule.onNodeWithText("Approved", substring = false).activate()
-        await { repo.observeDlEvents(semesterId).first().single().approved == 1 }
-        rule.waitUntil(10_000) { rule.onAllNodesWithText("Mixed approval").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("tab_settings").activate()
         rule.onAllNodesWithText(semesterName, substring = true).onFirst().assertExists()
         rule.onNodeWithTag("open_semester_$semesterId").performScrollTo().activate()

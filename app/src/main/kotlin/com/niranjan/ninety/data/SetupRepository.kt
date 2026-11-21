@@ -18,11 +18,11 @@ data class InitialSetup(val semester: Semester, val course: Course, val balance:
     fun validate(today: LocalDate) {
         require(!semester.completed) { "A new semester starts active." }
         require(course.semesterId == semester.id && balance.courseId == course.id) { "Invalid course ownership." }
-        require(!balance.loggingStartDate.isBefore(semester.startDate)) { "First logging date cannot precede the semester start." }
-        require(balance.conducted == 0L || !balance.loggingStartDate.isAfter(today)) {
+        requireUserRule(!balance.loggingStartDate.isBefore(semester.startDate)) { "First logging date cannot precede the semester start." }
+        requireUserRule(balance.conducted == 0L || !balance.loggingStartDate.isAfter(today)) {
             "Historical attendance cannot start in the future."
         }
-        require(balance.conducted == 0L || balance.loggingStartDate.isAfter(semester.startDate)) {
+        requireUserRule(balance.conducted == 0L || balance.loggingStartDate.isAfter(semester.startDate)) {
             "Opening attendance needs historical dates before the first logging date."
         }
     }
@@ -48,7 +48,7 @@ class RoomSetupRepository(
             val course = Course(UUID.fromString(row.courseId), semester.id, row.courseName,
                 CourseType.valueOf(row.courseType))
             val balance = OpeningBalance(course.id, LocalDate.ofEpochDay(row.loggingStartDay),
-                row.conducted, row.present, row.approvedDl, row.pendingDl)
+                row.conducted, row.present, row.dutyLeave)
             CourseOverview(semester, course, balance, AttendanceEngine.calculate(balance,
                 asOfDate = LocalDate.now(clock.withZone(semester.collegeZone))))
         }
@@ -57,7 +57,7 @@ class RoomSetupRepository(
     override suspend fun createInitialSetup(setup: InitialSetup) {
         setup.validate(LocalDate.now(clock.withZone(setup.semester.collegeZone)))
         database.withTransaction {
-            check(database.setupDao().semesterCount() == 0) { "Setup has already been completed. Reload your courses." }
+            requireUserRule(database.setupDao().semesterCount() == 0) { "Setup has already been completed. Reload your courses." }
             val s = setup.semester
             val c = setup.course
             val b = setup.balance
@@ -65,7 +65,7 @@ class RoomSetupRepository(
                 s.startDate.toEpochDay(), s.collegeZone.id))
             database.setupDao().insertCourse(CourseEntity(c.id.toString(), s.id.toString(), c.name.trim(), c.type.name))
             database.setupDao().insertBalance(OpeningBalanceEntity(c.id.toString(), b.loggingStartDate.toEpochDay(),
-                b.conducted, b.present, b.approvedDl, b.pendingDl))
+                b.conducted, b.present, b.dutyLeave))
             database.setupDao().insertSettings(AppSettingsEntity(activeSemesterId = s.id.toString()))
         }
     }
@@ -75,11 +75,11 @@ class RoomSetupRepository(
             val dao = database.setupDao()
             val active = dao.activeSemesterId()
             if (completed) {
-                check(active == semesterId.toString()) { "Only the active semester can be marked done." }
+                requireUserRule(active == semesterId.toString()) { "Only the active semester can be marked done." }
                 check(dao.clearActiveSemester(semesterId.toString()) == 1)
                 check(dao.markSemesterCompleted(semesterId.toString(), true, LocalDate.now(clock).toEpochDay()) == 1)
             } else {
-                check(active == null) { "Another semester is already active." }
+                requireUserRule(active == null) { "Another semester is already active." }
                 check(dao.markSemesterCompleted(semesterId.toString(), false, null) == 1)
                 check(dao.activateSemester(semesterId.toString()) == 1)
             }

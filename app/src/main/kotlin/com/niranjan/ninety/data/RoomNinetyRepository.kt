@@ -16,6 +16,7 @@ import com.niranjan.ninety.domain.ReconcileOp
 import com.niranjan.ninety.domain.TrackedSession
 import com.niranjan.ninety.domain.WeekTemplate
 import java.time.Clock
+import java.time.DateTimeException
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -35,14 +36,8 @@ private fun stableUuid(vararg parts: Any?): UUID =
 private fun dayUuid(semesterId: String, day: Long): UUID = stableUuid("day", semesterId, day)
 private fun sessionUuid(semesterId: String, day: Long, slot: Int): UUID = stableUuid("session", semesterId, day, slot)
 
-private fun mapOutcome(kind: String?, dlStatus: String?): AttendanceOutcome = when {
-    kind == null -> AttendanceOutcome.UNRECORDED
-    kind == "PRESENT" -> AttendanceOutcome.PRESENT
-    kind == "ABSENT" -> AttendanceOutcome.ABSENT
-    kind == "DL" && dlStatus == "APPROVED" -> AttendanceOutcome.DL_APPROVED
-    kind == "DL" && dlStatus == "REJECTED" -> AttendanceOutcome.DL_REJECTED
-    else -> AttendanceOutcome.DL_PENDING
-}
+private fun mapOutcome(kind: String?): AttendanceOutcome =
+    kind?.let(AttendanceOutcome::valueOf) ?: AttendanceOutcome.UNRECORDED
 
 private fun SessionEntity.image(hadOutcome: Boolean) = SessionImage(
     id, dayId, semesterId, courseId, slot, origin, counting, startMinute, endMinute,
@@ -53,22 +48,21 @@ private fun SessionImage.toEntity() = SessionEntity(id, dayId, semesterId, cours
 
 private fun DayInstanceEntity.image() = DayImage(id, kind, holiday, copiedWeekday, revision)
 private fun DayInstanceEntity.deletedImage() = DayImage(id, kind, holiday, copiedWeekday, revision, semesterId, day)
-private fun AttendanceOutcomeEntity.image() = OutcomeImage(sessionId, true, kind, dlStatus, dlEventId, revision)
-private fun OpeningBalanceEntity.image() = BalanceImage(courseId, loggingStartDay, conducted, present, approvedDl, pendingDl, revision)
+private fun AttendanceOutcomeEntity.image() = OutcomeImage(sessionId, true, kind, revision)
+private fun OpeningBalanceEntity.image() = BalanceImage(courseId, loggingStartDay, conducted, present, dutyLeave, revision)
 private fun missingOutcomeImage(sessionId: String) = OutcomeImage(sessionId, exists = false)
 
 private fun SessionRow.toFact(): PeriodFact = PeriodFact(
     UUID.fromString(id), UUID.fromString(courseId), LocalDate.ofEpochDay(day),
-    mapOutcome(outcomeKind, outcomeDlStatus), counting, cancelled || suppressed, holiday)
+    mapOutcome(outcomeKind), counting, cancelled || suppressed, holiday)
 
 private fun SessionRow.toView(course: CourseEntity?): SessionView = SessionView(
     UUID.fromString(id), LocalDate.ofEpochDay(day), UUID.fromString(courseId),
     course?.name ?: "Course",
     course?.let { runCatching { CourseType.valueOf(it.type) }.getOrDefault(CourseType.OTHER) } ?: CourseType.OTHER,
     course?.colorArgb, slot, SessionOrigin.valueOf(origin), counting, startMinute, endMinute,
-    cancelled, pinned, suppressed, mapOutcome(outcomeKind, outcomeDlStatus),
-    outcomeDlStatus?.let { DlStatus.valueOf(it) },
-    outcomeDlEventId?.let { UUID.fromString(it) }, revision)
+    cancelled, pinned, suppressed, mapOutcome(outcomeKind),
+    revision)
 
 private fun CourseSetup.toStoredCourse(semesterId: UUID): CourseEntity =
     CourseEntity(courseId.toString(), semesterId.toString(), input.name.trim(), input.type.name, input.colorArgb)
@@ -83,14 +77,14 @@ private class BatchBuilder(var label: String) {
     val createdDays = mutableListOf<String>()
     val createdSessions = mutableListOf<String>()
     val createdVersions = mutableListOf<String>()
-    val createdEvents = mutableListOf<String>()
     val deletedDays = mutableListOf<DayImage>()
     val deletedSessions = mutableListOf<SessionImage>()
     val deletedVersions = mutableListOf<VersionImage>()
+    var resumedCourse: ResumedCourseImage? = null
     val expected = mutableMapOf<String, Long>()
     fun payload() = undoJson.encodeToString(UndoPayload.serializer(),
         UndoPayload(label, days, sessions, outcomes, balances, createdDays, createdSessions,
-            createdVersions, createdEvents, deletedDays, deletedSessions, expected, deletedVersions))
+            createdVersions, deletedDays, deletedSessions, expected, deletedVersions, resumedCourse))
 }
 
 class RoomNinetyRepository(
@@ -109,6 +103,12 @@ class RoomNinetyRepository(
     private fun ceiling(semester: SemesterEntity, today: LocalDate): LocalDate {
         val completed = semester.completedDay?.let { LocalDate.ofEpochDay(it) }
         return if (semester.archived && completed != null && completed.isBefore(today)) completed else today
+    }
+
+    private fun validatedZone(zoneId: String): ZoneId = try {
+        ZoneId.of(zoneId)
+    } catch (error: DateTimeException) {
+        throw UserFacingException("Choose a valid timezone.", error)
     }
 
     // ---------------------------------------------------------------- observation
@@ -138,7 +138,7 @@ class RoomNinetyRepository(
             courses.map { course ->
                 val balance = balances[course.id]?.let {
                     OpeningBalance(course.id.toUuid(), LocalDate.ofEpochDay(it.loggingStartDay),
-                        it.conducted, it.present, it.approvedDl, it.pendingDl)
+                        it.conducted, it.present, it.dutyLeave)
                 } ?: OpeningBalance(course.id.toUuid(), LocalDate.ofEpochDay(startDay))
                 CourseStats(course, balance,
                     AttendanceEngine.calculate(balance, byCourse[course.id].orEmpty().map { it.toFact() }, asOf))
@@ -246,52 +246,29 @@ class RoomNinetyRepository(
             }.map { LocalDate.ofEpochDay(it.day) }.distinct().sorted()
         }
 
-    override fun observeDlEvents(semesterId: UUID): Flow<List<DlEventView>> =
-        combine(journal.observeEvents(semesterId.toString()),
-            journal.observeSessionRows(semesterId.toString()),
-            setup.observeCourses(semesterId.toString())) { rows, sessions, courses ->
-            val byEvent = sessions.filter { it.outcomeDlEventId != null }.groupBy { it.outcomeDlEventId!! }
-            rows.map { row ->
-                val status = when {
-                    row.periods == 0 -> DlEventStatus.EMPTY
-                    row.pending > 0 && row.approved == 0 && row.rejected == 0 -> DlEventStatus.PENDING
-                    row.approved > 0 && row.pending == 0 && row.rejected == 0 -> DlEventStatus.APPROVED
-                    row.rejected > 0 && row.pending == 0 && row.approved == 0 -> DlEventStatus.REJECTED
-                    else -> DlEventStatus.MIXED
+    override fun observeUndoable(): Flow<UndoableAction?> = journal.observeUndoable().map { batch ->
+        batch?.action(batch.decodePayload())
+    }
+
+    override fun observeRecentChanges(): Flow<List<UndoableAction>> =
+        database.invalidationTracker.createFlow("change_batch", "session", "day_instance", "attendance_outcome",
+            "opening_balance", "schedule_version", "template_slot", "course").map {
+            database.withTransaction {
+                val laterKeys = mutableSetOf<String>()
+                journal.pendingBatches().mapNotNull { batch ->
+                    val payload = batch.decodePayload() ?: return@mapNotNull null
+                    val hasLaterChange = payload.expectedRevisions.keys.any { it in laterKeys }
+                    laterKeys += payload.expectedRevisions.keys
+                    batch.action(payload).takeIf { !hasLaterChange && canUndo(payload) }
                 }
-                val attached = byEvent[row.id].orEmpty()
-                DlEventView(row.id.toUuid(), row.title, row.createdAt, status,
-                    row.periods, row.pending, row.approved, row.rejected, row.dates,
-                    attached.map { LocalDate.ofEpochDay(it.day) }.distinct().sorted(),
-                    attached.mapNotNull { courses.firstOrNull { c -> c.id == it.courseId }?.name }.distinct().sorted())
             }
         }
 
-    override fun observeDlEventSessions(eventId: UUID): Flow<List<SessionView>> =
-        combine(journal.observeSessionsForEvent(eventId.toString()),
-            setup.observeSemesters()) { rows, semesters ->
-            val courses = semesters.flatMap { setup.courses(it.id) }.associateBy { it.id }
-            rows.map { it.toView(courses[it.courseId]) }
-        }
+    private fun ChangeBatchEntity.decodePayload(): UndoPayload? =
+        runCatching { undoJson.decodeFromString(UndoPayload.serializer(), payload) }.getOrNull()
 
-    override fun observeDlStats(semesterId: UUID): Flow<DlStats> =
-        combine(journal.observeDlDates(semesterId.toString()),
-            journal.observeDlStatusCounts(semesterId.toString()),
-            journal.observeEvents(semesterId.toString()),
-            observeBalances(semesterId)) { dates, counts, events, balances ->
-            fun count(status: String) = counts.firstOrNull { it.dlStatus == status }?.total ?: 0
-            DlStats(dates, events.size, count("PENDING"), count("APPROVED"), count("REJECTED"),
-                balances.values.sumOf { it.pendingDl }, balances.values.sumOf { it.approvedDl })
-        }
-
-    override fun observeUndoable(): Flow<UndoableAction?> = journal.observeUndoable().map { batch ->
-        batch?.let {
-            val label = runCatching {
-                undoJson.decodeFromString(UndoPayload.serializer(), it.payload).label
-            }.getOrDefault(it.kind)
-            UndoableAction(it.id.toUuid(), it.kind, label, it.createdAt)
-        }
-    }
+    private fun ChangeBatchEntity.action(payload: UndoPayload?) =
+        UndoableAction(id.toUuid(), kind, payload?.label?.takeIf { it.isNotBlank() } ?: "Attendance changed", createdAt)
 
     override fun observeTemplates(semesterId: UUID): Flow<List<ScheduleVersion>> =
         schedule.observeTemplates(semesterId.toString()).map { groupVersions(semesterId, it) }
@@ -402,27 +379,27 @@ class RoomNinetyRepository(
     }
 
     override suspend fun createSemester(setupData: SemesterSetup): UUID {
-        require(setupData.name.isNotBlank()) { "Enter a semester name." }
+        requireUserRule(setupData.name.isNotBlank()) { "Enter a semester name." }
         require(setupData.courses.isNotEmpty()) { "Add at least one course." }
-        val zone = ZoneId.of(setupData.zoneId)
+        val zone = validatedZone(setupData.zoneId)
         val today = today(zone)
         val names = setupData.courses.map { it.input.name.trim().lowercase(Locale.ROOT) }
-        require(names.distinct().size == names.size) { "Course names must be unique within a semester." }
+        requireUserRule(names.distinct().size == names.size) { "Course names must be unique within a semester." }
         val start = setupData.startDate
         setupData.courses.forEach { cs ->
-            require(cs.input.name.isNotBlank()) { "Enter a course name." }
+            requireUserRule(cs.input.name.isNotBlank()) { "Enter a course name." }
             val b = cs.balance
             if (b != null) {
                 require(b.courseId == cs.courseId) { "Invalid course ownership." }
-                require(!b.loggingStartDate.isBefore(start)) { "First logging date cannot precede the semester start." }
-                require(b.conducted == 0L || b.loggingStartDate.isAfter(start)) {
+                requireUserRule(!b.loggingStartDate.isBefore(start)) { "First logging date cannot precede the semester start." }
+                requireUserRule(b.conducted == 0L || b.loggingStartDate.isAfter(start)) {
                     "Opening attendance needs historical dates before the first logging date." }
-                require(b.conducted == 0L || !b.loggingStartDate.isAfter(today)) {
+                requireUserRule(b.conducted == 0L || !b.loggingStartDate.isAfter(today)) {
                     "Historical attendance cannot start in the future." }
             }
         }
         val courseIds = setupData.courses.map { it.courseId.toString() }.toSet()
-        require(setupData.timetable.assignments.values.flatMap { it.values }.all { it.toString() in courseIds }) {
+        requireUserRule(setupData.timetable.assignments.values.flatMap { it.values }.all { it.toString() in courseIds }) {
             "The timetable can only contain courses in this semester." }
         val semesterId = UUID.randomUUID()
         database.withTransaction {
@@ -432,7 +409,7 @@ class RoomNinetyRepository(
                 setup.insertCourse(cs.toStoredCourse(semesterId))
                 val b = cs.balance ?: OpeningBalance(cs.courseId, start)
                 setup.insertBalance(OpeningBalanceEntity(cs.courseId.toString(),
-                    b.loggingStartDate.toEpochDay(), b.conducted, b.present, b.approvedDl, b.pendingDl))
+                    b.loggingStartDate.toEpochDay(), b.conducted, b.present, b.dutyLeave))
             }
             if (!setupData.timetable.isEmpty()) {
                 val versionId = UUID.randomUUID().toString()
@@ -452,16 +429,16 @@ class RoomNinetyRepository(
     }
 
     override suspend fun updateSemester(semesterId: UUID, name: String, startDate: LocalDate, zoneId: String) {
-        require(name.isNotBlank()) { "Enter a semester name." }
-        ZoneId.of(zoneId)
+        requireUserRule(name.isNotBlank()) { "Enter a semester name." }
+        validatedZone(zoneId)
         database.withTransaction {
             val current = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
             // Start changes may never exclude opening-balance coverage or recorded days.
-            val earliestCutoff = setup.activeCourses(semesterId.toString())
+            val earliestCutoff = setup.courses(semesterId.toString())
                 .mapNotNull { setup.balance(it.id)?.loggingStartDay }.minOrNull()
             val earliestSession = journal.earliestSessionDay(semesterId.toString())
             listOfNotNull(earliestCutoff, earliestSession).forEach { bound ->
-                require(startDate.toEpochDay() <= bound) { "Semester start cannot move past recorded history." }
+                requireUserRule(startDate.toEpochDay() <= bound) { "Semester start cannot move past recorded history." }
             }
             setup.updateSemester(semesterId.toString(), name.trim(), startDate.toEpochDay(), zoneId)
             if (current.startDay != startDate.toEpochDay()) setup.setMaterializedDay(semesterId.toString(), null)
@@ -473,12 +450,12 @@ class RoomNinetyRepository(
             val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
             val active = setup.activeSemesterId()
             if (completed) {
-                check(active == semesterId.toString() || active == null) { "Only the active semester can be marked done." }
+                requireUserRule(active == semesterId.toString() || active == null) { "Only the active semester can be marked done." }
                 if (active == semesterId.toString()) check(setup.clearActiveSemester(semesterId.toString()) == 1)
                 check(setup.markSemesterCompleted(semesterId.toString(), true,
                     today(zoneOf(semester)).toEpochDay()) == 1)
             } else {
-                check(active == null || active == semesterId.toString()) { "Another semester is already active." }
+                requireUserRule(active == null || active == semesterId.toString()) { "Another semester is already active." }
                 check(setup.markSemesterCompleted(semesterId.toString(), false, null) == 1)
                 check(setup.switchActiveSemester(semesterId.toString()) == 1)
             }
@@ -487,7 +464,7 @@ class RoomNinetyRepository(
 
     override suspend fun setActiveSemester(semesterId: UUID) {
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
-        require(!semester.archived) { "Reopen the semester before making it active." }
+        requireUserRule(!semester.archived) { "Reopen the semester before making it active." }
         check(setup.switchActiveSemester(semesterId.toString()) == 1) { "Settings unavailable." }
     }
 
@@ -495,31 +472,31 @@ class RoomNinetyRepository(
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
         val start = LocalDate.ofEpochDay(semester.startDay)
         val name = courseSetup.input.name.trim()
-        require(name.isNotEmpty()) { "Enter a course name." }
+        requireUserRule(name.isNotEmpty()) { "Enter a course name." }
         courseSetup.balance?.let { b ->
-            require(!b.loggingStartDate.isBefore(start)) { "First logging date cannot precede the semester start." }
-            require(b.conducted == 0L || b.loggingStartDate.isAfter(start)) {
+            requireUserRule(!b.loggingStartDate.isBefore(start)) { "First logging date cannot precede the semester start." }
+            requireUserRule(b.conducted == 0L || b.loggingStartDate.isAfter(start)) {
                 "Opening attendance needs historical dates before the first logging date." }
         }
         database.withTransaction {
-            require(setup.courses(semester.id).none { it.name.equals(name, ignoreCase = true) }) {
+            requireUserRule(setup.courses(semester.id).none { it.name.equals(name, ignoreCase = true) }) {
                 "Course names must be unique within a semester."
             }
             setup.insertCourse(courseSetup.toStoredCourse(semesterId))
             val b = courseSetup.balance ?: OpeningBalance(courseSetup.courseId, start)
             setup.insertBalance(OpeningBalanceEntity(courseSetup.courseId.toString(),
-                b.loggingStartDate.toEpochDay(), b.conducted, b.present, b.approvedDl, b.pendingDl))
+                b.loggingStartDate.toEpochDay(), b.conducted, b.present, b.dutyLeave))
         }
     }
 
     override suspend fun updateCourse(courseId: UUID, input: CourseInput) {
         val id = courseId.toString()
         val name = input.name.trim()
-        require(name.isNotEmpty()) { "Enter a course name." }
+        requireUserRule(name.isNotEmpty()) { "Enter a course name." }
         database.withTransaction {
             val current = setup.course(id) ?: throw IllegalArgumentException("Unknown course.")
             if (!current.name.equals(name, ignoreCase = true)) {
-                require(setup.courses(current.semesterId).none { it.id != id && it.name.equals(name, ignoreCase = true) }) {
+                requireUserRule(setup.courses(current.semesterId).none { it.id != id && it.name.equals(name, ignoreCase = true) }) {
                     "Course names must be unique within a semester."
                 }
             }
@@ -528,9 +505,10 @@ class RoomNinetyRepository(
     }
 
     override suspend fun retireCourse(courseId: UUID) {
-        val course = setup.course(courseId.toString()) ?: throw IllegalArgumentException("Unknown course.")
-        val semester = setup.semester(course.semesterId) ?: throw IllegalArgumentException("Unknown semester.")
         database.withTransaction {
+            val course = setup.course(courseId.toString()) ?: throw IllegalArgumentException("Unknown course.")
+            if (course.retired) return@withTransaction
+            val semester = setup.semester(course.semesterId) ?: throw IllegalArgumentException("Unknown semester.")
             val effective = today(zoneOf(semester)).plusDays(1)
             val versions = loadVersions(semester.id)
             versions.filter { !it.effectiveFrom.isBefore(effective) }.forEach { version ->
@@ -549,7 +527,24 @@ class RoomNinetyRepository(
                     slots.map { (slot, owner) -> TemplateSlotEntity(id, weekday.value, slot, owner.toString()) }
                 })
             }
-            check(setup.retireCourse(courseId.toString()) == 1)
+            check(setup.setCourseRetired(course.id, true) == 1)
+            journal.discardUndoForKind("course_resume:${course.id}")
+        }
+    }
+
+    override suspend fun resumeCourse(courseId: UUID) {
+        database.withTransaction {
+            val course = setup.course(courseId.toString()) ?: throw IllegalArgumentException("Unknown course.")
+            if (!course.retired) return@withTransaction
+            val semester = checkNotNull(setup.semester(course.semesterId))
+            val balance = checkNotNull(setup.balance(course.id))
+            requireUserRule(balance.loggingStartDay >= semester.startDay) {
+                "Update the course’s tracking start date before resuming."
+            }
+            val batch = BatchBuilder("Resumed tracking ${course.name}")
+            batch.resumedCourse = ResumedCourseImage(course.id, schedule.versionsForCourse(course.id).toSet())
+            check(setup.setCourseRetired(course.id, false) == 1)
+            recordBatch("course_resume:${course.id}", batch)
         }
     }
 
@@ -557,42 +552,28 @@ class RoomNinetyRepository(
         val course = setup.course(balance.courseId.toString()) ?: throw IllegalArgumentException("Unknown course.")
         val semester = setup.semester(course.semesterId) ?: throw IllegalArgumentException("Unknown semester.")
         val start = LocalDate.ofEpochDay(semester.startDay)
-        require(!balance.loggingStartDate.isBefore(start)) { "First logging date cannot precede the semester start." }
-        require(balance.conducted == 0L || balance.loggingStartDate.isAfter(start)) {
+        requireUserRule(!balance.loggingStartDate.isBefore(start)) { "First logging date cannot precede the semester start." }
+        requireUserRule(balance.conducted == 0L || balance.loggingStartDate.isAfter(start)) {
             "Opening attendance needs historical dates before the first logging date." }
         database.withTransaction {
             val existing = setup.balance(balance.courseId.toString())
-                ?: throw IllegalArgumentException("Unknown opening balance.")
+                ?: throw UserFacingException("Attendance before you started tracking is unavailable for this course.")
             if (existing.loggingStartDay != balance.loggingStartDate.toEpochDay()) {
                 val hasRecorded = journal.sessionRowsForCourse(semester.id, course.id)
                     .any { it.outcomeKind != null }
-                check(!hasRecorded) { "The first logging date is locked once attendance is recorded." }
+                requireUserRule(!hasRecorded) { "The first logging date is locked once attendance is recorded." }
             }
             val batch = BatchBuilder("Opening balance updated")
             batch.balances += existing.image()
             check(setup.updateBalance(course.id, balance.loggingStartDate.toEpochDay(), balance.conducted,
-                balance.present, balance.approvedDl, balance.pendingDl) == 1)
+                balance.present, balance.dutyLeave) == 1)
             recordBatch("opening_balance", batch)
-        }
-    }
-
-    override suspend fun resolveOpeningPendingDl(courseId: UUID, approve: Boolean) {
-        database.withTransaction {
-            val existing = setup.balance(courseId.toString())
-                ?: throw IllegalArgumentException("Unknown opening balance.")
-            check(existing.pendingDl > 0) { "No pending opening duty leave to resolve." }
-            val batch = BatchBuilder(if (approve) "Opening duty leave approved" else "Opening duty leave rejected")
-            batch.balances += existing.image()
-            check(setup.updateBalance(courseId.toString(), existing.loggingStartDay, existing.conducted,
-                existing.present, if (approve) existing.approvedDl + existing.pendingDl else existing.approvedDl,
-                0) == 1)
-            recordBatch("opening_dl", batch)
         }
     }
 
     override suspend fun updatePreferences(theme: String, haptics: Boolean, reminderEnabled: Boolean, reminderMinute: Int) {
         require(theme in setOf("SYSTEM", "LIGHT", "DARK"))
-        require(reminderMinute in 0..1439) { "Choose a valid reminder time." }
+        requireUserRule(reminderMinute in 0..1439) { "Choose a valid reminder time." }
         check(setup.updatePreferences(theme, haptics, reminderEnabled, reminderMinute) == 1) { "Settings unavailable." }
     }
 
@@ -602,17 +583,17 @@ class RoomNinetyRepository(
         template.assignments.values.flatMap { it.values }.map { it.toString() }.toSet().forEach { id ->
             val course = setup.course(id) ?: throw IllegalArgumentException("Unknown course in timetable.")
             require(course.semesterId == semesterId) { "Timetable courses must belong to the semester." }
-            require(!course.retired) { "Retired courses cannot stay on the timetable." }
+            requireUserRule(!course.retired) { "Retired courses cannot stay on the timetable." }
         }
     }
 
     override suspend fun saveTemplate(semesterId: UUID, template: WeekTemplate, effectiveFrom: LocalDate): List<ConflictInfo> {
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
-        require(!effectiveFrom.isBefore(today(zoneOf(semester)))) {
+        requireUserRule(!effectiveFrom.isBefore(today(zoneOf(semester)))) {
             "Timetable changes apply from today or a future date. Edit past days directly." }
-        validateTemplate(semester.id, template)
         val conflicts = mutableListOf<ConflictInfo>()
         database.withTransaction {
+            validateTemplate(semester.id, template)
             val batch = BatchBuilder("Timetable updated")
             schedule.versionAt(semester.id, effectiveFrom.toEpochDay())?.let { previous ->
                 batch.deletedVersions += VersionImage(previous.id, previous.semesterId,
@@ -678,10 +659,10 @@ class RoomNinetyRepository(
     private suspend fun requireWritableSession(sessionId: UUID, today: LocalDate): SessionEntity {
         val session = journal.session(sessionId.toString()) ?: throw IllegalArgumentException("Unknown class period.")
         val day = journal.dayById(session.dayId) ?: throw IllegalArgumentException("Unknown day.")
-        require(!LocalDate.ofEpochDay(day.day).isAfter(today)) { "Future classes cannot be recorded yet." }
-        require(!day.holiday) { "This day is marked as a holiday." }
-        require(!session.suppressed) { "This period is no longer on the schedule." }
-        require(!session.cancelled) { "This period is marked not conducted." }
+        requireUserRule(!LocalDate.ofEpochDay(day.day).isAfter(today)) { "Future classes cannot be recorded yet." }
+        requireUserRule(!day.holiday) { "This day is marked as a holiday." }
+        requireUserRule(!session.suppressed) { "This period is no longer on the schedule." }
+        requireUserRule(!session.cancelled) { "This period is marked not conducted." }
         return session
     }
 
@@ -700,26 +681,26 @@ class RoomNinetyRepository(
         journal.pruneBatches(30)
     }
 
-    private suspend fun batchOutcomeImage(batch: BatchBuilder, sessionId: String) {
-        batch.outcomes += journal.outcome(sessionId)?.image() ?: missingOutcomeImage(sessionId)
-    }
-
     override suspend fun recordPeriod(sessionId: UUID, outcome: AttendanceOutcome?) {
-        require(outcome == null || outcome == AttendanceOutcome.PRESENT || outcome == AttendanceOutcome.ABSENT) {
-            "Use duty leave actions for duty leave outcomes." }
+        require(outcome != AttendanceOutcome.UNRECORDED) { "Clear the attendance mark instead." }
         val session = journal.session(sessionId.toString()) ?: throw IllegalArgumentException("Unknown class period.")
         val semester = setup.semester(session.semesterId) ?: throw IllegalArgumentException("Unknown semester.")
         val today = today(zoneOf(semester))
         database.withTransaction {
-            requireWritableSession(sessionId, today)
-            val batch = BatchBuilder("Attendance updated")
-            batchOutcomeImage(batch, sessionId.toString())
+            val writable = requireWritableSession(sessionId, today)
+            val previous = journal.outcome(writable.id)
+            if (outcome == AttendanceOutcome.DUTY_LEAVE) {
+                requireUserRule(writable.counting) { "Only attendance-counting periods can receive duty leave." }
+                if (previous?.kind == outcome.name) return@withTransaction
+            }
+            val batch = BatchBuilder(if (outcome == AttendanceOutcome.DUTY_LEAVE) "Marked duty leave" else "Attendance updated")
+            batch.outcomes += previous?.image() ?: missingOutcomeImage(writable.id)
             if (outcome == null) {
                 journal.deleteOutcome(sessionId.toString())
-            } else if (journal.outcome(sessionId.toString()) == null) {
+            } else if (previous == null) {
                 journal.insertOutcome(AttendanceOutcomeEntity(sessionId.toString(), outcome.name))
             } else {
-                journal.updateOutcome(sessionId.toString(), outcome.name, null, null)
+                journal.updateOutcome(sessionId.toString(), outcome.name)
             }
             recordBatch("record", batch)
         }
@@ -748,13 +729,13 @@ class RoomNinetyRepository(
 
     override suspend fun markAllPresent(semesterId: UUID, date: LocalDate): Int {
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
-        require(!date.isAfter(today(zoneOf(semester)))) { "Future classes cannot be recorded yet." }
+        requireUserRule(!date.isAfter(today(zoneOf(semester)))) { "Future classes cannot be recorded yet." }
         return database.withTransaction {
             val batch = BatchBuilder("Marked all present")
             reconcileDay(semester, date, loadVersions(semester.id), batch, null)
             val day = journal.day(semester.id, date.toEpochDay())
-                ?: throw IllegalArgumentException("No classes scheduled for this date.")
-            require(!day.holiday) { "This day is marked as a holiday." }
+                ?: throw UserFacingException("No classes scheduled for this date.")
+            requireUserRule(!day.holiday) { "This day is marked as a holiday." }
             val eligible = journal.sessionsForDay(day.id).filter { s ->
                 s.counting && !s.cancelled && !s.suppressed &&
                     journal.outcome(s.id) == null
@@ -769,11 +750,25 @@ class RoomNinetyRepository(
         }
     }
 
+    override suspend fun markPresentFromReminder(semesterId: UUID, date: LocalDate): Int =
+        database.withTransaction {
+            val settings = setup.settings()
+            if (settings?.reminderEnabled != true || settings.activeSemesterId != semesterId.toString()) {
+                return@withTransaction 0
+            }
+            val semester = setup.semester(semesterId.toString()) ?: return@withTransaction 0
+            if (semester.archived || date != today(zoneOf(semester))) return@withTransaction 0
+            ensureDay(semesterId, date)
+            val day = journal.day(semester.id, date.toEpochDay())
+            if (day == null || day.holiday) return@withTransaction 0
+            markAllPresent(semesterId, date)
+        }
+
     override suspend fun setCancelled(sessionId: UUID, cancelled: Boolean) {
         val session = journal.session(sessionId.toString()) ?: throw IllegalArgumentException("Unknown class period.")
         val semester = setup.semester(session.semesterId) ?: throw IllegalArgumentException("Unknown semester.")
         val day = journal.dayById(session.dayId) ?: throw IllegalArgumentException("Unknown day.")
-        require(!LocalDate.ofEpochDay(day.day).isAfter(today(zoneOf(semester)))) {
+        requireUserRule(!LocalDate.ofEpochDay(day.day).isAfter(today(zoneOf(semester)))) {
             "Future classes cannot be changed yet." }
         database.withTransaction {
             val batch = BatchBuilder(if (cancelled) "Period marked not conducted" else "Period restored")
@@ -785,17 +780,21 @@ class RoomNinetyRepository(
 
     override suspend fun setHoliday(semesterId: UUID, date: LocalDate, holiday: Boolean) {
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
-        require(!date.isAfter(today(zoneOf(semester)))) { "Future days cannot be marked as holidays yet." }
+        val future = date.isAfter(today(zoneOf(semester)))
         database.withTransaction {
             val batch = BatchBuilder(if (holiday) "Marked as holiday" else "Holiday reversed")
             val existing = journal.day(semester.id, date.toEpochDay())
-            when {
-                existing == null && !holiday -> return@withTransaction
-                existing == null -> batch.createdDays += dayUuid(semester.id, date.toEpochDay()).toString()
-                else -> batch.days += existing.image()
+            if ((existing?.holiday ?: false) == holiday) return@withTransaction
+            if (future && !holiday && existing != null && existing.kind == DayKind.REGULAR.name &&
+                journal.sessionsForDay(existing.id).isEmpty()) {
+                // Removing an empty future marker restores the live template preview.
+                batch.deletedDays += existing.deletedImage()
+                journal.deleteDay(existing.id)
+            } else {
+                val day = existing ?: requireDay(semesterId, date)
+                if (existing == null) batch.createdDays += day.id else batch.days += day.image()
+                check(journal.setHoliday(day.id, holiday) == 1)
             }
-            val day = existing ?: requireDay(semesterId, date)
-            check(journal.setHoliday(day.id, holiday) == 1)
             recordBatch("holiday", batch)
         }
     }
@@ -809,14 +808,14 @@ class RoomNinetyRepository(
     }
 
     override suspend fun copyWeekday(semesterId: UUID, date: LocalDate, sourceWeekday: DayOfWeek): CopyResult {
-        require(PeriodTimes.isCollegeWeekday(sourceWeekday)) { "Copy a weekday timetable, Monday to Friday." }
+        requireUserRule(PeriodTimes.isCollegeWeekday(sourceWeekday)) { "Copy a weekday timetable, Monday to Friday." }
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
-        require(!date.isAfter(today(zoneOf(semester)))) { "Future days cannot be scheduled yet." }
+        requireUserRule(!date.isAfter(today(zoneOf(semester)))) { "Future days cannot be scheduled yet." }
         val versions = loadVersions(semester.id)
         val version = ScheduleResolver.effectiveVersion(versions, date)
-            ?: throw IllegalArgumentException("No weekly timetable exists for that date.")
+            ?: throw UserFacingException("No weekly timetable exists for that date.")
         val expected = ScheduleResolver.expectedSlots(version.template, sourceWeekday)
-        require(expected.isNotEmpty()) { "The chosen weekday has no classes to copy." }
+        requireUserRule(expected.isNotEmpty()) { "The chosen weekday has no classes to copy." }
         return database.withTransaction {
             val batch = BatchBuilder("Copied timetable")
             val hadDay = journal.day(semester.id, date.toEpochDay())
@@ -875,8 +874,8 @@ class RoomNinetyRepository(
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
         val course = setup.course(courseId.toString()) ?: throw IllegalArgumentException("Unknown course.")
         require(course.semesterId == semester.id) { "Extra classes must belong to the semester." }
-        require(startMinute in 0..1439 && endMinute in 1..1440 && startMinute < endMinute) { "Check the extra class times." }
-        require(!date.isAfter(today(zoneOf(semester)))) { "Future days cannot be scheduled yet." }
+        requireUserRule(startMinute in 0..1439 && endMinute in 1..1440 && startMinute < endMinute) { "Check the extra class times." }
+        requireUserRule(!date.isAfter(today(zoneOf(semester)))) { "Future days cannot be scheduled yet." }
         return database.withTransaction {
             val batch = BatchBuilder("Extra class added")
             val hadDay = journal.day(semester.id, date.toEpochDay())
@@ -893,7 +892,7 @@ class RoomNinetyRepository(
 
     override suspend fun setExtraCounting(sessionId: UUID, counting: Boolean) {
         val session = journal.session(sessionId.toString()) ?: throw IllegalArgumentException("Unknown class period.")
-        require(session.origin == SessionOrigin.EXTRA.name) { "Only extra classes change attendance counting." }
+        requireUserRule(session.origin == SessionOrigin.EXTRA.name) { "Only extra classes change attendance counting." }
         database.withTransaction {
             val batch = BatchBuilder(if (counting) "Extra class now counts" else "Extra class no longer counts")
             batch.sessions += session.image(journal.outcome(session.id) != null)
@@ -904,7 +903,7 @@ class RoomNinetyRepository(
 
     override suspend fun deleteExtra(sessionId: UUID) {
         val session = journal.session(sessionId.toString()) ?: throw IllegalArgumentException("Unknown class period.")
-        require(session.origin == SessionOrigin.EXTRA.name) { "Only extra classes can be removed." }
+        requireUserRule(session.origin == SessionOrigin.EXTRA.name) { "Only extra classes can be removed." }
         database.withTransaction {
             val batch = BatchBuilder("Extra class removed")
             journal.outcome(session.id)?.image()?.let { batch.outcomes += it }
@@ -929,143 +928,114 @@ class RoomNinetyRepository(
 
     // ---------------------------------------------------------------- duty leave
 
-    override suspend fun applyDutyLeave(semesterId: UUID, sessionIds: List<UUID>, title: String?, replace: Boolean): DlApplyResult {
-        require(sessionIds.isNotEmpty()) { "Choose at least one period." }
+    override suspend fun markDutyLeave(semesterId: UUID, sessionIds: List<UUID>, replace: Boolean): List<UUID> {
+        requireUserRule(sessionIds.isNotEmpty()) { "Choose at least one period." }
         val semester = setup.semester(semesterId.toString()) ?: throw IllegalArgumentException("Unknown semester.")
         val today = today(zoneOf(semester))
+        val kind = AttendanceOutcome.DUTY_LEAVE.name
         return database.withTransaction {
-            val conflicts = mutableListOf<UUID>()
-            val sessions = sessionIds.distinct().map { id ->
-                val s = requireWritableSession(id, today)
-                require(s.semesterId == semester.id) { "Duty leave periods must belong to the semester." }
-                require(s.counting) { "Only attendance-counting periods can receive duty leave." }
-                if (journal.outcome(id.toString()) != null) conflicts += id
-                s
-            }
-            if (conflicts.isNotEmpty() && !replace) {
-                return@withTransaction DlApplyResult(UUID(0, 0), 0, conflicts)
-            }
-            val eventId = UUID.randomUUID().toString()
-            journal.insertEvent(DlEventEntity(eventId, semester.id, title?.trim()?.ifBlank { null }, now()))
-            val batch = BatchBuilder("Duty leave applied")
-            batch.createdEvents += eventId
-            sessions.forEach { s ->
-                batchOutcomeImage(batch, s.id)
-                if (journal.outcome(s.id) == null) {
-                    journal.insertOutcome(AttendanceOutcomeEntity(s.id, "DL", "PENDING", eventId))
+            val targets = sessionIds.distinct().map { id ->
+                val session = requireWritableSession(id, today)
+                require(session.semesterId == semester.id) { "Duty leave periods must belong to the semester." }
+                requireUserRule(session.counting) { "Only attendance-counting periods can receive duty leave." }
+                session to journal.outcome(session.id)
+            }.filter { (_, previous) -> previous?.kind != kind }
+            val conflicts = targets.mapNotNull { (_, previous) -> previous?.sessionId?.toUuid() }
+            if (conflicts.isNotEmpty() && !replace) return@withTransaction conflicts
+
+            val batch = BatchBuilder("Marked duty leave")
+            targets.forEach { (session, previous) ->
+                batch.outcomes += previous?.image() ?: missingOutcomeImage(session.id)
+                if (previous == null) {
+                    journal.insertOutcome(AttendanceOutcomeEntity(session.id, kind))
                 } else {
-                    journal.updateOutcome(s.id, "DL", "PENDING", eventId)
+                    journal.updateOutcome(session.id, kind)
                 }
             }
-            recordBatch("dl_apply", batch)
-            DlApplyResult(eventId.toUuid(), sessions.size, emptyList())
-        }
-    }
-
-    override suspend fun updateDlStatus(eventId: UUID, status: DlStatus, sessionIds: Set<UUID>?) {
-        database.withTransaction {
-            val outcomes = journal.outcomesForEvent(eventId.toString())
-                .filter { it.kind == "DL" && (sessionIds == null || it.sessionId.toUuid() in sessionIds) }
-            if (outcomes.isEmpty()) return@withTransaction
-            val batch = BatchBuilder("Duty leave ${status.name.lowercase(Locale.ROOT)}")
-            outcomes.forEach { o ->
-                batch.outcomes += o.image()
-                check(journal.setOutcomeDlStatus(o.sessionId, eventId.toString(), status.name) == 1)
-            }
-            recordBatch("dl_status", batch)
-        }
-    }
-
-    override suspend fun removeDutyLeaveRequest(eventId: UUID) {
-        database.withTransaction {
-            val outcomes = journal.outcomesForEvent(eventId.toString()).filter { it.kind == "DL" }
-            if (outcomes.isEmpty()) return@withTransaction
-            val batch = BatchBuilder("Duty leave request removed")
-            // Keep the empty event so the journal can restore its links on Undo.
-            outcomes.forEach { outcome ->
-                batch.outcomes += outcome.image()
-                batch.expected["s:${outcome.sessionId}"] = checkNotNull(journal.session(outcome.sessionId)).revision
-                journal.deleteOutcome(outcome.sessionId)
-            }
-            recordBatch("dl_remove", batch)
+            if (targets.isNotEmpty()) recordBatch("duty_leave", batch)
+            emptyList()
         }
     }
 
     // ---------------------------------------------------------------- undo
 
-    override suspend fun undo(batchId: UUID): UndoResult {
-        val batch = journal.batch(batchId.toString()) ?: return UndoResult.NOT_FOUND
-        if (batch.undoneAt != null) return UndoResult.NOT_FOUND
-        val payload = runCatching { undoJson.decodeFromString(UndoPayload.serializer(), batch.payload) }
-            .getOrNull() ?: return UndoResult.NOT_FOUND
-        return database.withTransaction {
-            // Staleness: every row the change touched must still match the revision
-            // it held right after the write (-1 = must still be absent).
-            payload.expectedRevisions.forEach { (key, expected) ->
-                val current = when (key.substringBefore(':')) {
-                    "s" -> journal.session(key.drop(2))?.revision
-                    "d" -> journal.dayById(key.drop(2))?.revision
-                    "o" -> journal.outcome(key.drop(2))?.revision
-                    "b" -> setup.balance(key.drop(2))?.revision
-                    else -> expected
-                }
-                if ((current ?: -1L) != expected) return@withTransaction UndoResult.STALE
+    private suspend fun canUndo(payload: UndoPayload): Boolean {
+        // A deleted row uses revision -1. A later batch can reuse a revision after
+        // deleting and recreating a row, so callers also check for newer edits.
+        for ((key, expected) in payload.expectedRevisions) {
+            val current = when (key.substringBefore(':')) {
+                "s" -> journal.session(key.drop(2))?.revision
+                "d" -> journal.dayById(key.drop(2))?.revision
+                "o" -> journal.outcome(key.drop(2))?.revision
+                "b" -> setup.balance(key.drop(2))?.revision
+                else -> return false
             }
-            payload.createdVersions.forEach { id ->
-                if (schedule.version(id) == null) return@withTransaction UndoResult.STALE
-            }
-            payload.createdSessions.forEach { id ->
-                if (journal.outcome(id) != null) return@withTransaction UndoResult.STALE
-            }
-            payload.createdEvents.forEach { id ->
-                journal.event(id) ?: return@withTransaction UndoResult.STALE
-                val attached = journal.outcomesForEvent(id)
-                if (!attached.all { o -> payload.outcomes.any { it.sessionId == o.sessionId } }) {
-                    return@withTransaction UndoResult.STALE
-                }
-            }
-            // Reverse in dependency order: remove created outcomes, restore deleted days,
-            // delete/restore sessions, then restore outcomes, containers, and balances.
-            payload.outcomes.filter { !it.exists }.forEach { journal.deleteOutcome(it.sessionId) }
-            payload.days.forEach { img ->
-                check(journal.restoreDay(img.id, img.kind, img.holiday, img.copiedWeekday, img.revision) == 1)
-            }
-            payload.deletedDays.forEach { img ->
-                journal.insertDay(DayInstanceEntity(img.id, img.semesterId!!, img.day!!,
-                    img.kind, img.holiday, img.copiedWeekday, img.revision))
-            }
-            payload.createdSessions.forEach { journal.deleteSession(it) }
-            payload.deletedSessions.forEach { img -> journal.insertSession(img.toEntity()) }
-            payload.sessions.forEach { img ->
-                check(journal.restoreSession(img.id, img.courseId, img.origin, img.counting,
-                    img.startMinute, img.endMinute, img.cancelled, img.pinned, img.suppressed,
-                    img.revision) == 1)
-            }
-            payload.outcomes.filter { it.exists }.forEach { img ->
-                if (journal.restoreOutcome(img.sessionId, img.kind!!, img.dlStatus, img.dlEventId,
-                        img.revision) == 0) {
-                    journal.insertOutcome(AttendanceOutcomeEntity(img.sessionId, img.kind, img.dlStatus,
-                        img.dlEventId, img.revision))
-                }
-            }
-            payload.createdDays.forEach { id ->
-                if (journal.sessionsForDay(id).isEmpty()) journal.deleteDay(id)
-                else check(journal.setHoliday(id, false) == 1)
-            }
-            payload.createdVersions.forEach { schedule.deleteVersion(it) }
-            payload.deletedVersions.forEach { version ->
-                schedule.insertVersion(ScheduleVersionEntity(version.id, version.semesterId,
-                    version.effectiveDay, version.createdAt))
-                schedule.insertSlots(version.slots.map { TemplateSlotEntity(version.id, it.weekday, it.slot, it.courseId) })
-            }
-            payload.createdEvents.forEach { journal.deleteEvent(it) }
-            payload.balances.forEach { img ->
-                check(setup.restoreBalance(img.courseId, img.loggingStartDay, img.conducted, img.present,
-                    img.approvedDl, img.pendingDl, img.revision) == 1)
-            }
-            journal.markUndone(batch.id, now())
-            UndoResult.DONE
+            if ((current ?: -1L) != expected) return false
         }
+        if (payload.createdVersions.any { schedule.version(it) == null }) return false
+        if (payload.createdSessions.any { id ->
+                "o:$id" !in payload.expectedRevisions && journal.outcome(id) != null
+            }) return false
+        for (outcome in payload.outcomes.filter { it.exists }) {
+            if (journal.session(outcome.sessionId) == null && payload.deletedSessions.none { it.id == outcome.sessionId }) return false
+        }
+        payload.resumedCourse?.let { image ->
+            if (setup.course(image.id)?.retired != false ||
+                schedule.versionsForCourse(image.id).any { it !in image.existingScheduleIds }) return false
+        }
+        return true
+    }
+
+    override suspend fun undo(batchId: UUID): UndoResult = database.withTransaction {
+        val batches = journal.pendingBatches()
+        val index = batches.indexOfFirst { it.id == batchId.toString() }
+        if (index < 0) return@withTransaction UndoResult.NOT_FOUND
+        val batch = batches[index]
+        val payload = batch.decodePayload() ?: return@withTransaction UndoResult.NOT_FOUND
+        val touched = payload.expectedRevisions.keys
+        val hasLaterChange = batches.take(index).any { later ->
+            later.decodePayload()?.expectedRevisions?.keys?.any { it in touched } == true
+        }
+        if (hasLaterChange || !canUndo(payload)) return@withTransaction UndoResult.STALE
+        // Reverse in dependency order: remove created outcomes, restore deleted days,
+        // delete/restore sessions, then restore outcomes, containers, and balances.
+        payload.outcomes.filter { !it.exists }.forEach { journal.deleteOutcome(it.sessionId) }
+        payload.days.forEach { img ->
+            check(journal.restoreDay(img.id, img.kind, img.holiday, img.copiedWeekday, img.revision) == 1)
+        }
+        payload.deletedDays.forEach { img ->
+            journal.insertDay(DayInstanceEntity(img.id, img.semesterId!!, img.day!!,
+                img.kind, img.holiday, img.copiedWeekday, img.revision))
+        }
+        payload.createdSessions.forEach { journal.deleteSession(it) }
+        payload.deletedSessions.forEach { img -> journal.insertSession(img.toEntity()) }
+        payload.sessions.forEach { img ->
+            check(journal.restoreSession(img.id, img.courseId, img.origin, img.counting,
+                img.startMinute, img.endMinute, img.cancelled, img.pinned, img.suppressed,
+                img.revision) == 1)
+        }
+        payload.outcomes.filter { it.exists }.forEach { img ->
+            if (journal.restoreOutcome(img.sessionId, img.kind!!, img.revision) == 0) {
+                journal.insertOutcome(AttendanceOutcomeEntity(img.sessionId, img.kind, img.revision))
+            }
+        }
+        payload.createdDays.forEach { id ->
+            if (journal.sessionsForDay(id).isEmpty()) journal.deleteDay(id)
+            else check(journal.setHoliday(id, false) == 1)
+        }
+        payload.createdVersions.forEach { schedule.deleteVersion(it) }
+        payload.deletedVersions.forEach { version ->
+            schedule.insertVersion(ScheduleVersionEntity(version.id, version.semesterId,
+                version.effectiveDay, version.createdAt))
+            schedule.insertSlots(version.slots.map { TemplateSlotEntity(version.id, it.weekday, it.slot, it.courseId) })
+        }
+        payload.balances.forEach { img ->
+            check(setup.restoreBalance(img.courseId, img.loggingStartDay, img.conducted, img.present,
+                img.dutyLeave, img.revision) == 1)
+        }
+        payload.resumedCourse?.let { check(setup.setCourseRetired(it.id, true) == 1) }
+        journal.markUndone(batch.id, now())
+        UndoResult.DONE
     }
 
     // ---------------------------------------------------------------- backup

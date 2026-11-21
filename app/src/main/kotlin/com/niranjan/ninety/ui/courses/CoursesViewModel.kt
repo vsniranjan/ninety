@@ -25,12 +25,6 @@ class CoursesViewModel(
     val stats: StateFlow<List<CourseStats>?> = repository.observeCourseStats(semesterId, today)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val templates = repository.observeTemplates(semesterId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val leaveStats = repository.observeDlStats(semesterId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
     val messages = MutableStateFlow<String?>(null)
     val saving = MutableStateFlow(false)
     val courseAdded = MutableStateFlow(false)
@@ -52,6 +46,8 @@ class CoursesViewModel(
     }
 
     fun retireCourse(courseId: UUID) = act { repository.retireCourse(courseId) }
+
+    fun resumeCourse(courseId: UUID) = act { repository.resumeCourse(courseId) }
 
     fun correctBalance(balance: OpeningBalance) = act { repository.correctOpeningBalance(balance) }
 

@@ -15,6 +15,7 @@ import com.niranjan.ninety.domain.AttendanceOutcome
 import com.niranjan.ninety.domain.CourseType
 import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.domain.WeekTemplate
+import com.niranjan.ninety.ui.long
 import java.io.File
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -67,9 +68,11 @@ class RedesignDeviceTest {
         val os = CourseSetup(input = CourseInput("Operating Systems", CourseType.THEORY))
         val network = CourseSetup(input = CourseInput("Computer Networks", CourseType.THEORY))
         val lab = CourseSetup(input = CourseInput("Networks Lab", CourseType.LAB))
-        val math = CourseSetup(input = CourseInput("Engineering Mathematics", CourseType.THEORY))
-        fun balanced(c: CourseSetup, n: Long, p: Long, pending: Long = 0) =
-            c.copy(balance = OpeningBalance(c.courseId, today, n, p, 0, pending))
+        val math = CourseSetup(input = CourseInput("Engineering Mathematics and Applied Computational Methods", CourseType.THEORY))
+        fun balanced(c: CourseSetup, n: Long, p: Long, leave: Long = 0) =
+            c.copy(balance = OpeningBalance(c.courseId, today, n, p, leave))
+        repo.createSemester(SemesterSetup("Previous semester", today.minusDays(42),
+            ZoneId.systemDefault().id, listOf(CourseSetup(input = os.input)), WeekTemplate()))
         val semester = repo.createSemester(SemesterSetup("Semester 5", today.minusDays(28),
             ZoneId.systemDefault().id, listOf(balanced(os, 40, 38), balanced(network, 36, 32),
                 balanced(lab, 18, 15, 2), balanced(math, 30, 27)),
@@ -97,13 +100,35 @@ class RedesignDeviceTest {
         ui.onNodeWithTag("period_${osSession.id}").performScrollTo().performClick()
         ui.onNodeWithText("Class not held").assertExists()
         capture("phone-light-period-sheet")
-        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
-        ui.waitForIdle()
+        ui.onNodeWithText("Substitute course").performClick()
+        capture("phone-light-substitute-menu")
+        back()
+        back()
 
-        // Seed provisional leave in the same isolated database for the leave views.
+        ui.onNodeWithTag("day_title").performClick()
+        capture("phone-light-day-picker")
+        cancel()
+        ui.onNodeWithTag("day_menu").performClick()
+        capture("phone-light-day-menu")
+        ui.onNodeWithText("No classes today (holiday)").performClick()
+        capture("phone-light-holiday-confirm")
+        cancel()
+        ui.onNodeWithTag("day_menu").performClick()
+        ui.onNodeWithText("Use another day's timetable…").performClick()
+        capture("phone-light-weekday-picker")
+        back()
+        ui.onNodeWithTag("day_menu").performClick()
+        ui.onNodeWithText("Add an extra class…").performClick()
+        capture("phone-light-extra-class")
+        ui.onNodeWithTag("extra_start").performScrollTo().performClick()
+        capture("phone-light-extra-time")
+        back()
+        cancel()
+
+        // Seed duty leave in the same isolated database for the attendance views.
         val labIds = completed.groups.flatMap { it.cells }.mapNotNull { it.session }
             .filter { it.courseId == lab.courseId }.map { it.id }
-        val event = repo.applyDutyLeave(semester, labIds, "Campus event", true).eventId
+        repo.markDutyLeave(semester, labIds, replace = true)
         for (theme in listOf("Light", "Dark")) {
             tab("settings")
             ui.onNodeWithText(theme, substring = false).performScrollTo().performClick()
@@ -111,19 +136,68 @@ class RedesignDeviceTest {
                 ui.onAllNodes(hasText(theme) and isSelected()).fetchSemanticsNodes().isNotEmpty()
             }
             capture("phone-${theme.lowercase()}-settings")
-            ui.onNodeWithTag("export_backup").performScrollTo()
+            ui.onNodeWithTag("open_about").performScrollTo()
             capture("phone-${theme.lowercase()}-settings-backup")
+            if (theme == "Light") {
+                ui.onNodeWithTag("open_about").performClick()
+                capture("phone-light-about")
+                ui.onNodeWithText("Font license").performClick()
+                capture("phone-light-font-license")
+                ui.onNodeWithText("Done").performClick()
+                ui.onNodeWithTag("recent_changes").performScrollTo().performClick()
+                ui.waitUntil(10_000) { ui.onAllNodesWithText("Marked duty leave").fetchSemanticsNodes().isNotEmpty() }
+                ui.onNodeWithText("Marked duty leave").performScrollTo()
+                capture("phone-light-recent-changes")
+                ui.onNodeWithTag("open_semester_$semester").performScrollTo().performClick()
+                capture("phone-light-semester-details")
+                ui.onNodeWithTag("semester_lifecycle_$semester").performClick()
+                capture("phone-light-semester-finish")
+                cancel()
+                ui.onNodeWithText("Edit semester").performClick()
+                capture("phone-light-semester-edit")
+                cancel()
+                ui.onNodeWithContentDescription("Back").performClick()
+                ui.onNodeWithTag("semester_switcher").performClick()
+                capture("phone-light-semester-switcher")
+                cancel()
+                repo.updatePreferences("LIGHT", false, true, 1140)
+                ui.waitUntil(10_000) { ui.onAllNodesWithText("Reminder time").fetchSemanticsNodes().isNotEmpty() }
+                ui.onNodeWithText("Reminder time").performScrollTo().performClick()
+                capture("phone-light-reminder-time")
+                cancel()
+                repo.updatePreferences("LIGHT", false, false, 1140)
+            }
             tab("today")
             waitFor("day_complete")
             capture("phone-${theme.lowercase()}-today-complete")
             tab("courses")
-            ui.waitUntil(10_000) { ui.onAllNodesWithText("Includes", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            waitFor("courses_list")
             capture("phone-${theme.lowercase()}-courses")
             if (theme == "Light") {
                 ui.onNodeWithTag("courses_list").performScrollToNode(hasText("Operating Systems") and hasClickAction())
                 ui.onAllNodes(hasText("Operating Systems") and hasClickAction()).onFirst().performClick()
+                waitFor("course_detail")
                 capture("phone-light-course-details")
+                ui.onNodeWithTag("course_rename").performScrollTo().performClick()
+                capture("phone-light-course-rename")
+                cancel()
+                ui.onNodeWithTag("course_balance").performScrollTo().performClick()
+                capture("phone-light-course-balance")
+                ui.onNode(hasSetTextAction() and hasText("Duty leave")).performScrollTo().performTextReplacement("1")
+                ui.onNodeWithText("Save", substring = false).performClick()
+                withTimeout(10_000) {
+                    repo.observeCourseStats(semester, today).first { courses ->
+                        courses.single { it.course.id == os.courseId.toString() }.balance.dutyLeave == 1L
+                    }
+                }
+                ui.onNodeWithTag("course_stop").performScrollTo().performClick()
+                capture("phone-light-course-stop")
+                cancel()
                 ui.onNodeWithTag("tab_courses").performClick()
+                ui.onNodeWithTag("courses_list").performScrollToNode(hasTestTag("attendance_rules"))
+                ui.onNodeWithTag("attendance_rules").performClick()
+                capture("phone-light-attendance-rules")
+                back()
                 ui.onNodeWithTag("courses_list").performScrollToNode(hasTestTag("add_course"))
                 ui.onNodeWithTag("add_course").performClick()
                 waitFor("course_name")
@@ -136,34 +210,49 @@ class RedesignDeviceTest {
             capture("phone-${theme.lowercase()}-timetable")
             ui.onNodeWithTag("timetable_edit").performClick()
             capture("phone-${theme.lowercase()}-timetable-edit")
+            if (theme == "Light") {
+                ui.onNodeWithTag("timetable_effective_date").performScrollTo().performClick()
+                capture("phone-light-timetable-date")
+                back()
+                ui.onNodeWithContentDescription("Copy from…").performScrollTo().performClick()
+                capture("phone-light-timetable-copy")
+                back()
+                ui.onAllNodesWithTag("slot_cell").onFirst().performScrollTo().performClick()
+                capture("phone-light-timetable-assignment")
+                back()
+            }
             ui.onNodeWithContentDescription("Back", substring = false).performClick()
             tab("calendar")
             waitFor("month_prev")
             capture("phone-${theme.lowercase()}-calendar")
-            tab("courses")
-            ui.onNodeWithTag("open_duty_leave").performScrollTo().performClick()
-            waitFor("dl_expand_$event")
             if (theme == "Light") {
-                ui.onNodeWithTag("add_duty_leave").performScrollTo().performClick()
-                ui.onNodeWithText("OK").assertIsEnabled().performClick()
+                tab("today")
+                ui.onNodeWithTag("day_menu").performClick()
+                ui.onNodeWithText("Duty leave…").performClick()
                 waitFor("dl_confirm")
                 ui.onNodeWithTag("dl_confirm").assertIsNotEnabled()
+                capture("phone-light-leave-form")
+                ui.onNodeWithTag("dl_period_${osSession.id}").assertIsOff().performScrollTo()
+                    .performClick().assertIsOn()
+                ui.onNodeWithTag("dl_confirm").performClick()
+                waitFor("confirm_action")
+                ui.onNodeWithText("Replace").assertIsDisplayed()
+                capture("phone-light-replace-leave-marks")
                 ui.onNodeWithText("Cancel").performClick()
-                ui.onNodeWithContentDescription("Back", substring = false).performClick()
-                waitFor("duty_leave_list")
             }
-            capture("phone-${theme.lowercase()}-leave")
-            ui.onNodeWithTag("dl_expand_$event").performClick()
-            capture("phone-${theme.lowercase()}-leave-details")
-            ui.onNodeWithTag("dl_expand_$event").performClick()
         }
 
         // All four setup steps; cancel the draft rather than save a semester.
+        val savedSemesters = repo.observeAppState().first { it.loaded }.semesters
+            .map { it.entity.id }.toSet()
         tab("settings")
         ui.onNodeWithText("Light", substring = false).performScrollTo().performClick()
         ui.onNodeWithTag("new_semester").performScrollTo().performClick()
         waitFor("semester_name")
         capture("phone-light-setup-semester")
+        ui.onNodeWithText("College timezone").performScrollTo().performClick()
+        capture("phone-light-setup-timezones")
+        back()
         ui.onNodeWithTag("semester_name").performTextInput("Semester 6")
         ui.onNodeWithTag("start_date").performClick()
         ui.onNodeWithText("OK", substring = false).performClick()
@@ -179,12 +268,16 @@ class RedesignDeviceTest {
         capture("phone-light-setup-timetable")
         ui.onNodeWithTag("setup_action").performScrollTo().performClick()
         ui.onNodeWithText("Your timetable is empty").assertIsDisplayed()
+        capture("phone-light-setup-empty-timetable")
         ui.onNodeWithText("Skip for now").performClick()
         ui.onNodeWithText("Not on the weekly timetable").assertIsDisplayed()
         capture("phone-light-setup-review")
         ui.onNodeWithContentDescription("Cancel setup").performScrollTo().performClick()
+        capture("phone-light-setup-discard")
         ui.onNodeWithTag("confirm_action").performClick()
-        assertEquals(1, repo.observeAppState().first { it.loaded }.semesters.size)
+        waitFor("tab_today")
+        assertEquals(savedSemesters, repo.observeAppState().first { it.loaded }.semesters
+            .map { it.entity.id }.toSet())
     }
 
     @Test fun addCourseWithAttendanceSoFarOffersTimetable() = runBlocking {
@@ -200,7 +293,7 @@ class RedesignDeviceTest {
         ui.onNodeWithText("Attendance so far").performScrollTo().performClick()
         ui.onNodeWithText("Classes held").performScrollTo().performTextReplacement("10")
         ui.onNodeWithText("Attended in person").performScrollTo().performTextReplacement("8")
-        ui.onNodeWithText("Duty leave — pending").performScrollTo().performTextReplacement("1")
+        ui.onNodeWithText("Duty leave").performScrollTo().performTextReplacement("1")
         ui.onNodeWithTag("course_save").assertIsEnabled().performClick()
 
         val saved = withTimeout(10_000) {
@@ -209,20 +302,88 @@ class RedesignDeviceTest {
         }
         assertEquals(10L, saved.balance.conducted)
         assertEquals(8L, saved.balance.present)
-        assertEquals(1L, saved.balance.pendingDl)
+        assertEquals(1L, saved.balance.dutyLeave)
         val timetableAction = hasText("Timetable") and hasClickAction() and !hasTestTag("open_timetable")
         ui.waitUntil(10_000) { ui.onAllNodes(timetableAction).fetchSemanticsNodes().isNotEmpty() }
         ui.onNode(timetableAction).performClick()
         waitFor("timetable_edit")
     }
 
+    @Test fun coursesWithUnmarkedPeriodsOnDarkTheme() = runBlocking {
+        val lab = CourseSetup(input = CourseInput("Networks Lab", CourseType.LAB))
+        val theory = CourseSetup(input = CourseInput("Operating Systems", CourseType.THEORY))
+        val lastWeekday = generateSequence(today.minusDays(1)) { it.minusDays(1) }
+            .first { it.dayOfWeek.value <= DayOfWeek.FRIDAY.value }
+        val semester = repo.createSemester(SemesterSetup("Semester 5", lastWeekday.minusWeeks(1),
+            ZoneId.systemDefault().id, listOf(
+                lab.copy(balance = OpeningBalance(lab.courseId, lastWeekday, 3, 3)),
+                theory.copy(balance = OpeningBalance(theory.courseId, lastWeekday, 4, 3)),
+            ), WeekTemplate(mapOf(lastWeekday.dayOfWeek to
+                mapOf(1 to theory.courseId, 3 to lab.courseId, 4 to lab.courseId, 5 to lab.courseId)))))
+        repo.updatePreferences("DARK", false, false, 1140)
+        repo.ensureMaterialized(semester)
+        waitFor("tab_courses")
+        tab("courses")
+
+        val labRow = "course_row_${lab.courseId}"
+        val theoryRow = "course_row_${theory.courseId}"
+        waitFor(theoryRow)
+        ui.onNodeWithTag(labRow).assert(hasText("3 unmarked") and hasText("No absences to spare"))
+        ui.onNodeWithTag(theoryRow).assert(hasText("1 unmarked") and hasText("Attend the next 6 periods"))
+        capture("phone-dark-courses-unmarked")
+    }
+
+    @Test fun scheduledClassesAndFreePeriodsOnDarkTheme() = runBlocking {
+        val theory = CourseSetup(input = CourseInput("Operating Systems", CourseType.THEORY))
+        val lab = CourseSetup(input = CourseInput("Networks Lab", CourseType.LAB))
+        val date = today.with(java.time.temporal.TemporalAdjusters.previous(DayOfWeek.THURSDAY))
+        val semester = repo.createSemester(SemesterSetup("Semester 5", date, ZoneId.systemDefault().id,
+            listOf(theory, lab), WeekTemplate(mapOf(date.dayOfWeek to
+                mapOf(1 to theory.courseId, 3 to lab.courseId, 4 to lab.courseId, 5 to lab.courseId)))))
+        repo.updatePreferences("DARK", false, false, 1140)
+        repo.ensureMaterialized(semester)
+        waitFor("previous_day")
+        repeat((today.toEpochDay() - date.toEpochDay()).toInt()) { offset ->
+            ui.onNodeWithTag("previous_day").performClick()
+            val expected = today.minusDays(offset + 1L).long()
+            ui.waitUntil(10_000) {
+                ui.onAllNodes(hasTestTag("day_title") and hasContentDescription(expected))
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        waitFor("mark_all")
+        ui.onNodeWithTag("return_today").assertIsDisplayed()
+        ui.onNodeWithText("P2 · 10:00 · Free").assertIsDisplayed()
+        ui.onNodeWithContentDescription("P3, Not marked").assertDoesNotExist()
+        capture("phone-dark-today-unmarked")
+
+        val labPeriod = repo.observeDay(semester, date).first().groups.single { it.grouped }
+            .cells.first().session!!
+        val expandLab = ui.onNodeWithTag("group_periods_${labPeriod.id}")
+        expandLab.performScrollTo().performClick()
+        ui.onNodeWithTag("period_${labPeriod.id}_absent").performScrollTo().performClick()
+        ui.waitUntil(10_000) { ui.onAllNodesWithText("Remaining periods").fetchSemanticsNodes().isNotEmpty() }
+        capture("phone-dark-today-expanded")
+        expandLab.performScrollTo().performClick()
+        ui.onNodeWithContentDescription("P3, Absent").assertExists()
+        ui.onNodeWithTag("mark_all").performScrollTo().performClick()
+        waitFor("day_complete")
+        assertEquals(4, repo.observeDay(semester, date).first().recorded)
+        assertEquals(AttendanceOutcome.ABSENT, repo.observeDay(semester, date).first()
+            .groups.single { it.grouped }.cells.first().session!!.outcome)
+        capture("phone-dark-today-complete")
+    }
+
+    private fun cancel() = ui.onNodeWithText("Cancel", substring = false).performClick()
+
+    private fun back() {
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        ui.waitForIdle()
+    }
+
     private fun tab(name: String) {
         ui.onNodeWithTag("tab_$name").performClick()
         ui.waitForIdle()
-        if (name == "courses" && ui.onAllNodesWithTag("duty_leave_list").fetchSemanticsNodes().isNotEmpty()) {
-            ui.onNodeWithTag("tab_courses").performClick()
-            ui.waitForIdle()
-        }
     }
     private fun waitFor(tag: String) {
         ui.waitUntil(15_000) { ui.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
@@ -237,7 +398,10 @@ class RedesignDeviceTest {
         android.os.SystemClock.sleep(450)
         val captureRun = InstrumentationRegistry.getArguments().getString("reviewRun") ?: "manual"
         val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "redesign-review/$captureRun").apply { mkdirs() }
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = checkNotNull((1..3).firstNotNullOfOrNull { attempt ->
+            if (attempt > 1) android.os.SystemClock.sleep(300)
+            instrumentation.uiAutomation.takeScreenshot()
+        }) { "No device screenshot for $name" }
         File(folder, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }

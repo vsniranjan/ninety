@@ -17,23 +17,20 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -44,8 +41,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -65,13 +62,18 @@ import com.niranjan.ninety.R
 import com.niranjan.ninety.data.AppSettings
 import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.domain.CourseType
+import com.niranjan.ninety.ui.designsystem.ActionRow
 import com.niranjan.ninety.ui.designsystem.ActionIcon
+import com.niranjan.ninety.ui.designsystem.CapsText
 import com.niranjan.ninety.ui.designsystem.ChoiceRow
 import com.niranjan.ninety.ui.designsystem.CollegeZoneAction
 import com.niranjan.ninety.ui.designsystem.CollegeZonePicker
 import com.niranjan.ninety.ui.designsystem.ConfirmDialog
+import com.niranjan.ninety.ui.designsystem.NinetyAlertDialog
 import com.niranjan.ninety.ui.designsystem.NinetyCard
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
+import com.niranjan.ninety.ui.designsystem.NinetySnackbarHost
+import com.niranjan.ninety.ui.designsystem.NinetyTextField
 import com.niranjan.ninety.ui.designsystem.PeriodProgress
 import com.niranjan.ninety.ui.designsystem.PrimaryAction
 import com.niranjan.ninety.ui.designsystem.ScreenHeading
@@ -131,15 +133,13 @@ fun SetupScreen(model: SetupViewModel, currentSemester: SemesterInfo? = null, se
         return
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(snackbarHost = { NinetySnackbarHost(snackbar) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding().padding(horizontal = 24.dp)
             .verticalScroll(scroll)) {
-            Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 24.dp),
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text("Ninety", style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("${state.step + 1} / ${state.stepCount}", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                CapsText("Ninety", style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f))
                 if (onCancel != null) {
                     ActionIcon(R.drawable.ic_close, stringResource(R.string.cancel_setup), requestCancel,
                         enabled = !state.saving)
@@ -167,7 +167,9 @@ fun SetupScreen(model: SetupViewModel, currentSemester: SemesterInfo? = null, se
                     ReviewStep(state, today)
                     if (!settings.reminderEnabled) {
                         Spacer(Modifier.height(12.dp))
-                        SettingSwitch(stringResource(R.string.daily_reminder), state.enableReminder,
+                        val reminderTime = java.time.LocalTime.of(settings.reminderMinute / 60, settings.reminderMinute % 60)
+                            .format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))
+                        SettingSwitch(stringResource(R.string.setup_reminder_at, reminderTime), state.enableReminder,
                             enabled = !state.saving) { enabled ->
                             if (enabled && Build.VERSION.SDK_INT >= 33 &&
                                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
@@ -225,15 +227,15 @@ fun SetupScreen(model: SetupViewModel, currentSemester: SemesterInfo? = null, se
             onDismiss = { editingCourse = null })
     }
     if (confirmCancel) {
-        ConfirmDialog(stringResource(R.string.discard_setup), stringResource(R.string.discard_setup_body),
+        ConfirmDialog(stringResource(R.string.discard_setup), body = null,
             stringResource(R.string.discard), onConfirm = {
                 confirmCancel = false
                 onCancel?.invoke()
             }, onDismiss = { confirmCancel = false })
     }
     if (confirmFinish && currentSemester != null) {
-        AlertDialog(onDismissRequest = { confirmFinish = false },
-            title = { Text(stringResource(R.string.finish_semester_question, currentSemester.entity.name)) },
+        NinetyAlertDialog(onDismissRequest = { confirmFinish = false },
+            title = { CapsText(stringResource(R.string.finish_semester_question, currentSemester.entity.name)) },
             text = { Text(stringResource(R.string.finish_previous_semester_body)) },
             confirmButton = {
                 TextButton(onClick = {
@@ -249,8 +251,8 @@ fun SetupScreen(model: SetupViewModel, currentSemester: SemesterInfo? = null, se
             })
     }
     if (state.confirmEmptyTimetable) {
-        AlertDialog(onDismissRequest = model::dismissEmptyTimetable,
-            title = { Text(stringResource(R.string.empty_timetable_title)) },
+        NinetyAlertDialog(onDismissRequest = model::dismissEmptyTimetable,
+            title = { CapsText(stringResource(R.string.empty_timetable_title)) },
             text = { Text(stringResource(R.string.empty_timetable_body)) },
             confirmButton = {
                 TextButton(onClick = model::skipEmptyTimetable, modifier = Modifier.heightIn(min = 48.dp)) {
@@ -281,25 +283,15 @@ private fun stepTitle(step: Int): String = when (step) {
 private fun SemesterStep(state: SetupState, today: LocalDate, onPickDate: () -> Unit,
     onName: (String) -> Unit, onPickZone: () -> Unit, onPastAttendance: (Boolean) -> Unit) {
     val focus = LocalFocusManager.current
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.setup_intro), style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(value = state.semesterName, onValueChange = onName,
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        NinetyTextField(value = state.semesterName, onValueChange = onName,
             label = { Text("Semester name") }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
             modifier = Modifier.fillMaxWidth().testTag("semester_name"))
-        NinetyCard(Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Semester start", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(state.startDate?.medium() ?: "Choose a date",
-                        style = MaterialTheme.typography.titleMedium)
-                }
-                ActionIcon(R.drawable.ic_calendar, "Semester start", onPickDate, modifier = Modifier.testTag("start_date"))
-            }
-        }
+        ActionRow(R.drawable.ic_calendar, stringResource(R.string.semester_start_label), onPickDate,
+            supportingText = state.startDate?.medium(),
+            modifier = Modifier.testTag("start_date"), showChevron = true)
         if (state.asksAboutPastAttendance(today)) {
             Column(Modifier.selectableGroup()) {
                 Text(stringResource(R.string.setup_midsemester_question), style = MaterialTheme.typography.titleSmall,
@@ -349,8 +341,8 @@ private fun CoursesStep(state: SetupState, today: LocalDate, onAdd: () -> Unit,
                 }
             }
         }
-        PrimaryAction("Add course", onAdd, icon = R.drawable.ic_add,
-            modifier = Modifier.fillMaxWidth().testTag("add_course"))
+        ActionRow(R.drawable.ic_add, stringResource(R.string.add_course), onAdd,
+            modifier = Modifier.testTag("add_course"))
     }
 }
 
@@ -397,15 +389,9 @@ private fun ReviewStep(state: SetupState, today: LocalDate) {
                     }
                 }
                 if (course.hasBalance) {
-                    val pending = course.pendingDl.toLong()
-                    val credited = course.present.toLong() + course.approvedDl.toLong() + pending
+                    val credited = course.present.toLong() + course.dutyLeave.toLong()
                     Text(stringResource(R.string.setup_attendance_review, credited, course.conducted.toLong()),
                         style = MaterialTheme.typography.bodySmall)
-                    if (pending > 0) {
-                        Text(pluralStringResource(R.plurals.setup_pending_attendance_review,
-                            pending.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), pending),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                 }
             }
         }
@@ -430,19 +416,19 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
     }
     val logging = draft.loggingDate.toLocalDateOrNull()
     val countError = if (showBalance) openingCountError(draft.conducted.toLongOrNull(),
-        draft.present.toLongOrNull(), draft.approvedDl.toLongOrNull(), draft.pendingDl.toLongOrNull()) else null
+        draft.present.toLongOrNull(), draft.dutyLeave.toLongOrNull()) else null
     val dateError = if (showBalance && (expandBalance || draft.hasBalance)) when {
         logging == null -> R.string.choose_tracking_date
         semesterStart != null && (logging < semesterStart || (draft.hasBalance && logging == semesterStart)) -> R.string.tracking_date_after_start
         logging > today -> R.string.tracking_date_by_today
         else -> null
     } else null
-    AlertDialog(onDismissRequest = onDismiss,
-        title = { Text(stringResource(if (existing.name.isBlank()) R.string.add_course else R.string.edit_course)) },
+    NinetyAlertDialog(onDismissRequest = onDismiss,
+        title = { CapsText(stringResource(if (existing.name.isBlank()) R.string.add_course else R.string.edit_course)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = draft.name,
+                NinetyTextField(value = draft.name,
                     onValueChange = { draft = draft.copy(name = it) },
                     label = { Text(stringResource(R.string.course_name)) }, singleLine = true,
                     isError = nameError != null && (draft.name.isNotEmpty() || existing.name.isNotEmpty()),
@@ -473,11 +459,10 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
                     val fields = listOf(
                         Triple(R.string.classes_held, draft.conducted, { value: String -> draft = draft.copy(conducted = value) }),
                         Triple(R.string.attended_in_person, draft.present, { value: String -> draft = draft.copy(present = value) }),
-                        Triple(R.string.duty_leave_count_approved, draft.approvedDl, { value: String -> draft = draft.copy(approvedDl = value) }),
-                        Triple(R.string.duty_leave_count_pending, draft.pendingDl, { value: String -> draft = draft.copy(pendingDl = value) }),
+                        Triple(R.string.duty_leave, draft.dutyLeave, { value: String -> draft = draft.copy(dutyLeave = value) }),
                     )
                     fields.forEach { (label, value, onChange) ->
-                        OutlinedTextField(value = value, onValueChange = onChange,
+                        NinetyTextField(value = value, onValueChange = onChange,
                             label = { Text(stringResource(label)) }, singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             isError = value.toLongOrNull()?.let { it < 0 } ?: true,
@@ -488,7 +473,7 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
                             style = MaterialTheme.typography.bodySmall)
                     } else {
                         val absent = draft.conducted.toLong() - draft.present.toLong() -
-                            draft.approvedDl.toLong() - draft.pendingDl.toLong()
+                            draft.dutyLeave.toLong()
                         Text(stringResource(R.string.absence_count, absent), style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -498,7 +483,7 @@ internal fun CourseDraftDialog(existing: CourseDraft, courses: List<CourseDraft>
             TextButton(onClick = {
                 if (!allowBalance) onSave(existing.copy(name = draft.name, type = draft.type))
                 else onSave(if (showBalance) draft else draft.copy(conducted = "0",
-                    present = "0", approvedDl = "0", pendingDl = "0"))
+                    present = "0", dutyLeave = "0"))
             }, enabled = !saving && nameError == null && countError == null && dateError == null,
                 modifier = Modifier.heightIn(min = 48.dp).testTag(saveTag)) { Text(stringResource(R.string.save)) }
         },

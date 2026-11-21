@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,11 +30,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.niranjan.ninety.R
 import com.niranjan.ninety.data.SemesterInfo
 import com.niranjan.ninety.ui.designsystem.ActionRow
+import com.niranjan.ninety.ui.designsystem.CapsText
 import com.niranjan.ninety.ui.designsystem.CollegeZoneAction
 import com.niranjan.ninety.ui.designsystem.CollegeZonePicker
 import com.niranjan.ninety.ui.designsystem.ConfirmDialog
 import com.niranjan.ninety.ui.designsystem.EmptyState
+import com.niranjan.ninety.ui.designsystem.GhostButton
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
+import com.niranjan.ninety.ui.designsystem.NinetyTextField
 import com.niranjan.ninety.ui.displayMessage
 import com.niranjan.ninety.ui.medium
 import com.niranjan.ninety.ui.ninetyViewModel
@@ -54,7 +55,7 @@ fun SemesterScreen(id: UUID, snackbar: SnackbarHostState, onViewSemester: () -> 
     LaunchedEffect(message) { displayedMessage?.let { snackbar.showSnackbar(it); model.dismissMessages() } }
     val semester = state.semesters.firstOrNull { it.entity.id == id.toString() }
     if (semester == null) {
-        if (state.loaded) EmptyState(stringResource(R.string.semester_unavailable), "")
+        if (state.loaded) EmptyState(stringResource(R.string.semester_unavailable))
         return
     }
     val archived = semester.entity.archived
@@ -73,7 +74,7 @@ fun SemesterScreen(id: UUID, snackbar: SnackbarHostState, onViewSemester: () -> 
         Text(semesterSummary(semester, current), style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 16.dp))
         ActionRow(R.drawable.ic_calendar, stringResource(R.string.view_records), onViewSemester,
-            modifier = Modifier.testTag("browse_$id"))
+            modifier = Modifier.testTag("browse_$id"), showChevron = true)
         ActionRow(R.drawable.ic_edit, stringResource(R.string.edit_semester), {
             model.clearSemesterEditError()
             editing = true
@@ -140,12 +141,12 @@ private fun EditSemester(originalName: String, originalDate: LocalDate, original
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.edit_semester_heading), style = MaterialTheme.typography.headlineSmall)
-        OutlinedTextField(name, { name = it; onEdit() }, modifier = Modifier.fillMaxWidth(), enabled = !saving,
+        NinetyTextField(name, { name = it; onEdit() }, modifier = Modifier.fillMaxWidth(), enabled = !saving,
             label = { Text(stringResource(R.string.semester_name)) }, singleLine = true)
-        ActionRow(R.drawable.ic_calendar, stringResource(R.string.semester_edit_start_date, date.medium()),
-            { if (!saving) pickStart = true }, showChevron = true,
-            supportingText = stringResource(R.string.semester_start_history_help))
-        CollegeZoneAction(zone, showPhoneSummary = false, enabled = !saving, onClick = { pickZone = true })
+        ActionRow(R.drawable.ic_calendar, stringResource(R.string.semester_start_label),
+            { pickStart = true }, showChevron = true, enabled = !saving,
+            supportingText = date.medium())
+        CollegeZoneAction(zone, enabled = !saving, onClick = { pickZone = true })
         if (error != null) {
             Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
@@ -153,8 +154,8 @@ private fun EditSemester(originalName: String, originalDate: LocalDate, original
             TextButton(onClick = onDismiss, enabled = !saving, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.cancel))
             }
-            Button(onClick = { onSave(name, date, zone) }, enabled = !saving && name.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.save)) }
+            GhostButton(onClick = { onSave(name, date, zone) }, enabled = !saving && name.isNotBlank(),
+                modifier = Modifier.heightIn(min = 48.dp)) { CapsText(stringResource(R.string.save)) }
         }
     }
     if (pickStart) NinetyDatePicker(date, onPicked = { startDay = it.toEpochDay(); pickStart = false; onEdit() },

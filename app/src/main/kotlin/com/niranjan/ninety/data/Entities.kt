@@ -52,8 +52,7 @@ data class OpeningBalanceEntity(
     val loggingStartDay: Long,
     val conducted: Long,
     val present: Long,
-    val approvedDl: Long,
-    val pendingDl: Long,
+    val dutyLeave: Long,
     val revision: Long = 0,
 )
 
@@ -173,35 +172,14 @@ data class SessionEntity(
     foreignKeys = [
         ForeignKey(entity = SessionEntity::class, parentColumns = ["id"],
             childColumns = ["sessionId"], onDelete = ForeignKey.RESTRICT),
-        ForeignKey(entity = DlEventEntity::class, parentColumns = ["id"],
-            childColumns = ["dlEventId"], onDelete = ForeignKey.RESTRICT),
     ],
-    indices = [Index("dlEventId")],
 )
 data class AttendanceOutcomeEntity(
     /** One current outcome per dated session. */
     @PrimaryKey val sessionId: String,
-    /** PRESENT | ABSENT | DL. */
+    /** PRESENT | ABSENT | DUTY_LEAVE. */
     val kind: String,
-    /** PENDING | APPROVED | REJECTED — required iff kind = DL. */
-    val dlStatus: String? = null,
-    val dlEventId: String? = null,
     val revision: Long = 0,
-)
-
-@Entity(
-    tableName = "dl_event",
-    foreignKeys = [ForeignKey(
-        entity = SemesterEntity::class, parentColumns = ["id"], childColumns = ["semesterId"],
-        onDelete = ForeignKey.RESTRICT,
-    )],
-    indices = [Index("semesterId")],
-)
-data class DlEventEntity(
-    @PrimaryKey val id: String,
-    val semesterId: String,
-    val title: String? = null,
-    val createdAt: Long,
 )
 
 @Entity(tableName = "change_batch")

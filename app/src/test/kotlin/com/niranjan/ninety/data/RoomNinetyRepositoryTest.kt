@@ -1,5 +1,8 @@
 package com.niranjan.ninety.data
 
+import android.app.Application
+import android.app.Notification
+import android.app.NotificationManager
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.niranjan.ninety.domain.AttendanceOutcome
@@ -7,20 +10,21 @@ import com.niranjan.ninety.domain.CourseType
 import com.niranjan.ninety.domain.DayKind
 import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.domain.WeekTemplate
+import com.niranjan.ninety.platform.ReminderNotifier
+import com.niranjan.ninety.ui.userMessage
 import java.time.Clock
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -31,6 +35,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
@@ -179,6 +184,53 @@ class RoomNinetyRepositoryTest {
     }
 
     @Test
+    fun `reminder action marks only today and replaces its notification with confirmation`() = runTest {
+        seedSemester()
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val manager = app.getSystemService(NotificationManager::class.java)
+        val periods = sessionsOf(today)
+        val math = periods.first { it.courseId == mathId }
+        val physics = periods.first { it.courseId == physId }
+        val lab = periods.filter { it.courseId == labId }
+        repository.recordPeriod(math.id, AttendanceOutcome.ABSENT)
+        repository.recordPeriod(physics.id, AttendanceOutcome.DUTY_LEAVE)
+        repository.setCancelled(lab.first().id, true)
+        val mathBefore = stats(mathId).summary
+        val physicsBefore = stats(physId).summary
+        val labBefore = stats(labId).summary
+
+        assertEquals(0, repository.markPresentFromReminder(semesterId, today))
+        assertTrue(manager.activeNotifications.isEmpty())
+        repository.updatePreferences("SYSTEM", true, true, 19 * 60)
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        ReminderNotifier.runCheck(app, repository, clock)
+        assertTrue(manager.activeNotifications.isEmpty())
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        ReminderNotifier.runCheck(app, repository, clock)
+        val reminder = manager.activeNotifications.single().notification
+        assertEquals("All present", reminder.actions.single().title.toString())
+        assertEquals(labBefore, stats(labId).summary)
+
+        assertEquals(0, repository.markPresentFromReminder(semesterId, monday))
+        assertEquals(0, repository.markPresentFromReminder(UUID.randomUUID(), today))
+        assertTrue(sessionsOf(monday).none { it.recorded })
+
+        ReminderNotifier.markAllPresent(app, repository, clock, semesterId, today)
+        val confirmation = manager.activeNotifications.single().notification
+        assertEquals("Marked 2 periods present.", confirmation.extras.getCharSequence(Notification.EXTRA_TEXT))
+        assertTrue(confirmation.actions.isNullOrEmpty())
+        assertEquals(mathBefore, stats(mathId).summary)
+        assertEquals(physicsBefore, stats(physId).summary)
+        assertEquals(2L, stats(labId).summary.physicallyPresent)
+        assertEquals(2L, stats(labId).summary.conducted)
+        assertEquals(0, repository.markPresentFromReminder(semesterId, today))
+        assertEquals(UndoResult.DONE, undoLatest())
+        assertEquals(labBefore, stats(labId).summary)
+        repository.setHoliday(semesterId, today, true)
+        assertEquals(0, repository.markPresentFromReminder(semesterId, today))
+    }
+
+    @Test
     fun `mark all present rejects holidays and empty days`() = runTest {
         seedSemester()
         repository.setHoliday(semesterId, today, true)
@@ -195,6 +247,50 @@ class RoomNinetyRepositoryTest {
     }
 
     // ---------------------------------------------------------------- exceptions
+
+    @Test
+    fun `future holiday preserves recorded history and stays out of attendance obligations`() = runTest {
+        seedSemester()
+        repository.markAllPresent(semesterId, monday)
+        val before = stats(mathId).summary
+        val future = today.plusDays(7)
+
+        repository.setHoliday(semesterId, future, true)
+        repository.ensureDay(semesterId, future)
+        repository.ensureMaterialized(semesterId)
+        assertTrue(dayView(future).holiday)
+        assertEquals(0, dayView(future).total)
+        assertTrue(sessionsOf(future).isEmpty())
+        assertEquals(before, stats(mathId).summary)
+        assertTrue(runCatching { repository.copyWeekday(semesterId, future, DayOfWeek.MONDAY) }.isFailure)
+        assertTrue(runCatching { repository.addExtra(semesterId, future, mathId, 900, 960, true) }.isFailure)
+
+        repository.restoreBackup(repository.exportBackup())
+        val later = RoomNinetyRepository(db, Clock.offset(clock, java.time.Duration.ofDays(8)))
+        later.ensureMaterialized(semesterId)
+        val holiday = later.observeDay(semesterId, future).first()
+        assertTrue(holiday.holiday)
+        assertEquals(0, holiday.total)
+        assertFalse(future in later.observeIncompleteDates(semesterId, future.plusDays(1)).first())
+        assertEquals(before, stats(mathId).summary)
+
+        later.setHoliday(semesterId, future, false)
+        assertEquals(5, later.observeDay(semesterId, future).first().total)
+        assertTrue(future in later.observeIncompleteDates(semesterId, future.plusDays(1)).first())
+        assertEquals(before, stats(mathId).summary)
+    }
+
+    @Test
+    fun `removing a future holiday restores the preview and its undo restores the holiday`() = runTest {
+        seedSemester()
+        val future = today.plusDays(7)
+        val original = dayView(future)
+        repository.setHoliday(semesterId, future, true)
+        repository.setHoliday(semesterId, future, false)
+        assertEquals(original, dayView(future))
+        assertEquals(UndoResult.DONE, undoLatest())
+        assertTrue(dayView(future).holiday)
+    }
 
     @Test
     fun `holiday excludes periods and reverses cleanly`() = runTest {
@@ -287,70 +383,75 @@ class RoomNinetyRepositoryTest {
     // ---------------------------------------------------------------- duty leave
 
     @Test
-    fun `pending duty leave credits provisionally then resolves`() = runTest {
+    fun `single duty leave can be corrected or cleared with undo`() = runTest {
         seedSemester()
-        val phys = sessionsOf(today).single { it.courseId == physId }
-        val applied = repository.applyDutyLeave(semesterId, listOf(phys.id), "Conference")
-        assertTrue(applied.conflicts.isEmpty())
-        stats(physId).let {
-            assertEquals(1, it.summary.pendingDl)
-            assertTrue(it.summary.isProvisional)
-            assertEquals(1, it.summary.credited) // provisional credit
-        }
-        repository.updateDlStatus(applied.eventId, DlStatus.APPROVED)
-        stats(physId).let {
-            assertEquals(0, it.summary.pendingDl)
-            assertEquals(1, it.summary.approvedDl)
-            assertFalse(it.summary.isProvisional)
-        }
-    }
+        val physics = sessionsOf(today).single { it.courseId == physId }
+        repository.recordPeriod(physics.id, AttendanceOutcome.DUTY_LEAVE)
+        assertEquals(1L, stats(physId).summary.dutyLeave)
+        assertEquals(1L, stats(physId).summary.credited)
 
-    @Test
-    fun `rejected duty leave removes the credit`() = runTest {
-        seedSemester()
-        val phys = sessionsOf(today).single { it.courseId == physId }
-        val applied = repository.applyDutyLeave(semesterId, listOf(phys.id), null)
-        repository.updateDlStatus(applied.eventId, DlStatus.REJECTED)
-        stats(physId).let {
-            assertEquals(0, it.summary.credited)
-            assertEquals(1, it.summary.datedRejectedDl)
-        }
-    }
-
-    @Test
-    fun `applying duty leave over a recorded period needs replace`() = runTest {
-        seedSemester()
-        val phys = sessionsOf(today).single { it.courseId == physId }
-        repository.recordPeriod(phys.id, AttendanceOutcome.ABSENT)
-        val first = repository.applyDutyLeave(semesterId, listOf(phys.id), null)
-        assertEquals(listOf(phys.id), first.conflicts)
-        val second = repository.applyDutyLeave(semesterId, listOf(phys.id), null, replace = true)
-        assertEquals(1, second.applied)
-        assertEquals(AttendanceOutcome.DL_PENDING, sessionsOf(today).single { it.id == phys.id }.outcome)
-    }
-
-    @Test
-    fun `removing a duty leave request clears its remaining periods and undo restores their approvals`() = runTest {
-        seedSemester()
-        val mondayMath = sessionsOf(monday).first { it.courseId == mathId }.id
-        val wednesdayMath = sessionsOf(today).first { it.courseId == mathId }.id
-        val physics = sessionsOf(today).first { it.courseId == physId }.id
-        val event = repository.applyDutyLeave(semesterId, listOf(mondayMath, wednesdayMath, physics), "Campus event")
-        repository.updateDlStatus(event.eventId, DlStatus.APPROVED, setOf(mondayMath))
-        repository.updateDlStatus(event.eventId, DlStatus.REJECTED, setOf(wednesdayMath))
-        repository.recordPeriod(physics, AttendanceOutcome.PRESENT)
-
-        repository.removeDutyLeaveRequest(event.eventId)
-
-        assertEquals(0, repository.observeDlEvents(semesterId).first().single().periods)
-        assertEquals(AttendanceOutcome.UNRECORDED, sessionsOf(monday).single { it.id == mondayMath }.outcome)
-        assertEquals(AttendanceOutcome.UNRECORDED, sessionsOf(today).single { it.id == wednesdayMath }.outcome)
-        assertEquals(AttendanceOutcome.PRESENT, sessionsOf(today).single { it.id == physics }.outcome)
+        repository.recordPeriod(physics.id, AttendanceOutcome.ABSENT)
+        assertEquals(1L, stats(physId).summary.conducted)
+        assertEquals(0L, stats(physId).summary.credited)
         assertEquals(UndoResult.DONE, undoLatest())
-        val restored = repository.observeDlEventSessions(event.eventId).first()
-        assertEquals(mapOf(mondayMath to DlStatus.APPROVED, wednesdayMath to DlStatus.REJECTED),
-            restored.associate { it.id to it.dlStatus })
-        assertEquals(mapOf(mondayMath to monday, wednesdayMath to today), restored.associate { it.id to it.date })
+        assertEquals(1L, stats(physId).summary.dutyLeave)
+
+        repository.recordPeriod(physics.id, null)
+        assertEquals(0L, stats(physId).summary.conducted)
+        assertEquals(UndoResult.DONE, undoLatest())
+        assertEquals(AttendanceOutcome.DUTY_LEAVE, sessionsOf(today).single { it.id == physics.id }.outcome)
+    }
+
+    @Test
+    fun `bulk duty leave confirms all replacements and undoes the lab as one change`() = runTest {
+        seedSemester()
+        val lab = sessionsOf(today).filter { it.courseId == labId }
+        val (absent, present, unrecorded) = lab
+        repository.recordPeriod(absent.id, AttendanceOutcome.ABSENT)
+        repository.recordPeriod(present.id, AttendanceOutcome.PRESENT)
+        val ids = lab.map { it.id } + unrecorded.id
+        val original = listOf(AttendanceOutcome.ABSENT, AttendanceOutcome.PRESENT, AttendanceOutcome.UNRECORDED)
+        suspend fun labOutcomes() = sessionsOf(today).filter { it.courseId == labId }.map { it.outcome }
+
+        assertEquals(setOf(absent.id, present.id), repository.markDutyLeave(semesterId, ids).toSet())
+        assertEquals(original, labOutcomes())
+        assertTrue(repository.markDutyLeave(semesterId, ids, replace = true).isEmpty())
+        assertEquals(3L, stats(labId).summary.dutyLeave)
+        assertEquals(3L, stats(labId).summary.credited)
+        assertEquals(3L, stats(labId).summary.conducted)
+
+        val undoable = repository.observeUndoable().first()
+        assertTrue(repository.markDutyLeave(semesterId, ids).isEmpty())
+        assertEquals(undoable, repository.observeUndoable().first())
+        repository.markAllPresent(semesterId, today)
+        assertEquals(List(3) { AttendanceOutcome.DUTY_LEAVE }, labOutcomes())
+        assertEquals(UndoResult.DONE, undoLatest()) // Mark remaining present.
+        assertEquals(UndoResult.DONE, undoLatest()) // All three duty leave marks.
+        assertEquals(original, labOutcomes())
+    }
+
+    @Test
+    fun `ineligible periods cannot receive duty leave and a bulk failure leaves other marks alone`() = runTest {
+        seedSemester()
+        val physics = sessionsOf(today).single { it.courseId == physId }
+        val extra = repository.addExtra(semesterId, today, physId, 970, 1010, counting = false)
+        val futureDate = today.plusDays(1)
+        val laterRepository = RoomNinetyRepository(db, Clock.offset(clock, java.time.Duration.ofDays(1)))
+        val future = laterRepository.addExtra(semesterId, futureDate, physId, 970, 1010, counting = true)
+        suspend fun reject(block: suspend () -> Unit) {
+            assertTrue(runCatching { block() }.exceptionOrNull() is UserFacingException)
+        }
+
+        reject { repository.recordPeriod(extra, AttendanceOutcome.DUTY_LEAVE) }
+        reject { repository.markDutyLeave(semesterId, listOf(physics.id, extra)) }
+        reject { repository.recordPeriod(future, AttendanceOutcome.DUTY_LEAVE) }
+        assertEquals(0L, stats(physId).summary.conducted)
+
+        repository.setCancelled(physics.id, true)
+        reject { repository.markDutyLeave(semesterId, listOf(physics.id)) }
+        repository.setCancelled(physics.id, false)
+        repository.setHoliday(semesterId, today, true)
+        reject { repository.recordPeriod(physics.id, AttendanceOutcome.DUTY_LEAVE) }
     }
 
     // ---------------------------------------------------------------- undo
@@ -382,6 +483,54 @@ class RoomNinetyRepositoryTest {
         assertEquals(UndoResult.STALE, repository.undo(first.batchId))
         // the newer batch still works
         assertEquals(UndoResult.DONE, undoLatest())
+    }
+
+    @Test
+    fun `recent changes exposes independent undo and hides superseded revisions`() = runTest {
+        seedSemester()
+        val math = sessionsOf(today).first { it.courseId == mathId }
+        val phys = sessionsOf(today).first { it.courseId == physId }
+        val previousMath = stats(mathId).summary
+        repository.recordPeriod(phys.id, AttendanceOutcome.PRESENT)
+        val independent = repository.observeUndoable().first()!!
+        repository.recordPeriod(math.id, AttendanceOutcome.PRESENT)
+        val original = repository.observeUndoable().first()!!
+        repository.recordPeriod(math.id, null)
+        val cleared = repository.observeUndoable().first()!!
+        repository.recordPeriod(math.id, AttendanceOutcome.ABSENT)
+        val newest = repository.observeUndoable().first()!!
+        val before = stats(mathId).summary
+
+        val changes = repository.observeRecentChanges().first()
+        assertEquals(listOf(newest, independent), changes)
+        assertEquals(clock.millis(), changes.first().createdAt)
+        assertEquals("Attendance updated", changes.first().label)
+        repository.restoreBackup(repository.exportBackup())
+        assertEquals(changes, repository.observeRecentChanges().first())
+        assertEquals(UndoResult.STALE, repository.undo(original.batchId))
+        assertEquals(before, stats(mathId).summary)
+        assertEquals(UndoResult.DONE, repository.undo(independent.batchId))
+        assertEquals(before, stats(mathId).summary)
+        assertEquals(UndoResult.DONE, repository.undo(newest.batchId))
+        assertEquals(listOf(cleared), repository.observeRecentChanges().first())
+        assertEquals(UndoResult.DONE, repository.undo(cleared.batchId))
+        assertEquals(listOf(original), repository.observeRecentChanges().first())
+        assertEquals(UndoResult.DONE, repository.undo(original.batchId))
+        assertEquals(previousMath, stats(mathId).summary)
+        assertTrue(repository.observeRecentChanges().first().isEmpty())
+    }
+
+    @Test
+    fun `recent changes can undo mark all on a newly materialized date`() = runTest {
+        seedSemester()
+        val later = RoomNinetyRepository(db, Clock.offset(clock, java.time.Duration.ofDays(7)))
+        val future = today.plusDays(7)
+        val before = later.observeCourseStats(semesterId, future).first()
+        assertEquals(5, later.markAllPresent(semesterId, future))
+        val change = later.observeRecentChanges().first().single()
+        assertEquals(UndoResult.DONE, later.undo(change.batchId))
+        assertEquals(before, later.observeCourseStats(semesterId, future).first())
+        assertTrue(later.observeRecentChanges().first().isEmpty())
     }
 
     @Test
@@ -460,9 +609,10 @@ class RoomNinetyRepositoryTest {
     @Test
     fun `backup round-trips every table atomically`() = runTest {
         seedSemester()
+        repository.correctOpeningBalance(OpeningBalance(mathId, monday.plusDays(1), 10, 8, dutyLeave = 1))
         repository.markAllPresent(semesterId, today)
         val phys = sessionsOf(today).single { it.courseId == physId }
-        repository.applyDutyLeave(semesterId, listOf(phys.id), "Festival", replace = true)
+        repository.markDutyLeave(semesterId, listOf(phys.id), replace = true)
         val before = repository.observeCourseStats(semesterId, today).first()
             .associate { it.course.id to it.summary }
         val bytes = repository.exportBackup()
@@ -473,6 +623,7 @@ class RoomNinetyRepositoryTest {
         try {
             val repo2 = RoomNinetyRepository(db2, clock)
             val preview = repo2.validateBackup(bytes)
+            assertEquals(3, preview.formatVersion)
             assertEquals(1, preview.semesters)
             assertEquals(3, preview.courses)
             repo2.restoreBackup(bytes)
@@ -482,12 +633,36 @@ class RoomNinetyRepositoryTest {
                 val restored = after.getValue(courseId)
                 assertEquals("$courseId conducted", summary.conducted, restored.conducted)
                 assertEquals("$courseId credited", summary.credited, restored.credited)
-                assertEquals("$courseId pending", summary.pendingDl, restored.pendingDl)
+                assertEquals("$courseId duty leave", summary.dutyLeave, restored.dutyLeave)
             }
-            assertEquals(1, repo2.observeDlStats(semesterId).first().pending)
+            assertEquals(AttendanceOutcome.DUTY_LEAVE,
+                repo2.observeDay(semesterId, today).first().groups.flatMap { it.cells }
+                    .single { it.session?.id == phys.id }.session?.outcome)
         } finally {
             db2.close()
         }
+    }
+
+    @Test
+    fun `only user written rule messages reach feedback and failed mutations keep attendance`() = runTest {
+        seedSemester()
+        repository.markAllPresent(semesterId, monday)
+        val before = stats(mathId).summary
+        val journalBefore = repository.observeRecentChanges().first()
+        val rule = runCatching { repository.markAllPresent(semesterId, today.plusDays(1)) }.exceptionOrNull()
+        assertTrue(rule is UserFacingException)
+        assertEquals("Future classes cannot be recorded yet.", rule!!.userMessage())
+        val internal = runCatching { repository.recordPeriod(UUID.randomUUID(), AttendanceOutcome.PRESENT) }
+            .exceptionOrNull()
+        assertEquals("Unknown class period.", internal!!.message)
+        assertEquals("Something went wrong. Your data is safe.", internal.userMessage())
+        assertEquals("Something went wrong. Your data is safe.",
+            runCatching { check(false) }.exceptionOrNull()!!.userMessage())
+        val backup = runCatching { repository.validateBackup("invalid".toByteArray()) }.exceptionOrNull()
+        assertTrue(backup is BackupException)
+        assertEquals("This file is not a valid Ninety backup.", backup!!.userMessage())
+        assertEquals(before, stats(mathId).summary)
+        assertEquals(journalBefore, repository.observeRecentChanges().first())
     }
 
     @Test
@@ -501,29 +676,22 @@ class RoomNinetyRepositoryTest {
     }
 
     @Test
-    fun `legacy course labels are ignored without losing the schedule or recorded attendance`() = runTest {
+    fun `old backup formats are rejected before restoring any data`() = runTest {
         seedSemester()
         val period = sessionsOf(today).first { it.courseId == labId }
         repository.recordPeriod(period.id, AttendanceOutcome.PRESENT)
-
         val fresh = Json.parseToJsonElement(repository.exportBackup().decodeToString()).jsonObject
-        val courses = fresh.getValue("courses").jsonArray
-        assertTrue(courses.all { "code" !in it.jsonObject && "normalizedCode" !in it.jsonObject })
-        val legacyCourses = courses.mapIndexed { index, course ->
-            JsonObject(course.jsonObject + mapOf(
-                "code" to JsonPrimitive("Lab-$index"), "normalizedCode" to JsonPrimitive("LAB-$index"),
-            ))
-        }
-        val legacy = JsonObject(fresh + mapOf("format" to JsonPrimitive(1), "courses" to JsonArray(legacyCourses)))
-            .toString().encodeToByteArray()
-        assertEquals(1, repository.validateBackup(legacy).formatVersion)
-        repository.restoreBackup(legacy)
-        repository.updateCourse(labId, CourseInput("Experimental Physics Laboratory", CourseType.LAB))
 
-        val restored = sessionsOf(today).single { it.id == period.id }
-        assertEquals(labId, restored.courseId)
-        assertEquals("Experimental Physics Laboratory", restored.courseName)
-        assertEquals(AttendanceOutcome.PRESENT, restored.outcome)
+        for (version in 1..2) {
+            val legacy = JsonObject(fresh + ("format" to JsonPrimitive(version))).toString().encodeToByteArray()
+            for (operation in listOf<suspend () -> Unit>(
+                { repository.validateBackup(legacy) }, { repository.restoreBackup(legacy) })) {
+                val failure = runCatching { operation() }.exceptionOrNull()
+                assertTrue(failure is BackupException)
+                assertTrue(failure?.message.orEmpty().contains("unsupported version ($version)"))
+            }
+        }
+        assertEquals(AttendanceOutcome.PRESENT, sessionsOf(today).single { it.id == period.id }.outcome)
         assertTrue(repository.currentTemplate(semesterId).first().assignments.values.any { labId in it.values })
     }
 
@@ -617,21 +785,84 @@ class RoomNinetyRepositoryTest {
         assertTrue(repository.observeCourses(semesterId).first().single { it.id == mathId.toString() }.retired)
     }
 
+    @Test fun `resuming a course enables timetable assignment and preserves its balance and marks`() = runTest {
+        seedSemester()
+        repository.correctOpeningBalance(OpeningBalance(mathId, today, conducted = 10, present = 9))
+        repository.recordPeriod(sessionsOf(today).first { it.courseId == mathId }.id, AttendanceOutcome.PRESENT)
+        val before = stats(mathId)
+        repository.retireCourse(mathId)
+        val cleanTemplate = repository.currentTemplate(semesterId).first()
+        val effective = today.plusDays(1)
+        assertTrue(runCatching { repository.saveTemplate(semesterId, defaultTemplate(), effective) }.isFailure)
+
+        repository.resumeCourse(mathId)
+        val resume = repository.observeUndoable().first()!!
+        assertEquals(cleanTemplate, repository.currentTemplate(semesterId).first())
+        assertFalse(stats(mathId).course.retired)
+        assertEquals(before.balance, stats(mathId).balance)
+        assertEquals(before.summary, stats(mathId).summary)
+        assertTrue(runCatching {
+            repository.correctOpeningBalance(OpeningBalance(mathId, monday))
+        }.isFailure)
+
+        assertEquals(UndoResult.DONE, repository.undo(resume.batchId))
+        assertTrue(stats(mathId).course.retired)
+        assertEquals(before.summary, stats(mathId).summary)
+        repository.resumeCourse(mathId)
+        val latestResume = repository.observeUndoable().first()!!
+        repository.saveTemplate(semesterId, defaultTemplate(), effective)
+        assertEquals(UndoResult.STALE, repository.undo(latestResume.batchId))
+        assertEquals(defaultTemplate(), repository.currentTemplate(semesterId).first())
+        assertEquals(before.summary, stats(mathId).summary)
+        repository.restoreBackup(repository.exportBackup())
+        assertFalse(stats(mathId).course.retired)
+        assertEquals(before.summary, stats(mathId).summary)
+    }
+
+    @Test fun `semester start respects opening balances for stopped courses`() = runTest {
+        seedSemester(template = WeekTemplate())
+        repository.correctOpeningBalance(OpeningBalance(physId, today))
+        repository.correctOpeningBalance(OpeningBalance(labId, today))
+        val cutoff = monday.plusDays(1)
+        repository.correctOpeningBalance(OpeningBalance(mathId, cutoff, conducted = 10, present = 9))
+        repository.retireCourse(mathId)
+        val before = stats(mathId).summary
+
+        assertTrue(runCatching { repository.updateSemester(semesterId, "Spring", today, zone.id) }.isFailure)
+        repository.resumeCourse(mathId)
+        assertEquals(cutoff, stats(mathId).balance.loggingStartDate)
+        assertEquals(before, stats(mathId).summary)
+    }
+
+    @Test fun `stopping and resuming again supersedes the old resume undo`() = runTest {
+        seedSemester()
+        repository.retireCourse(mathId)
+        repository.resumeCourse(mathId)
+        val first = repository.observeUndoable().first()!!
+        repository.retireCourse(mathId)
+        repository.resumeCourse(mathId)
+        assertEquals(UndoResult.NOT_FOUND, repository.undo(first.batchId))
+        assertFalse(stats(mathId).course.retired)
+    }
+
     @Test fun `opening balance changes emit fresh live statistics`() = kotlinx.coroutines.runBlocking {
         seedSemester()
+        val balance = OpeningBalance(mathId, monday.plusDays(1), 40, 37)
+        repository.correctOpeningBalance(balance)
         val channel = kotlinx.coroutines.channels.Channel<List<CourseStats>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
         val collection = launch {
             repository.observeCourseStats(semesterId, today).collect { channel.send(it) }
         }
         try {
             kotlinx.coroutines.withTimeout(10_000) { channel.receive() }
-            repository.correctOpeningBalance(OpeningBalance(mathId, monday.plusDays(1), 40, 38))
+            repository.correctOpeningBalance(balance.copy(dutyLeave = 1))
             val changed = kotlinx.coroutines.withTimeout(10_000) {
                 var value: CourseStats
                 do { value = channel.receive().single { it.course.id == mathId.toString() } }
-                while (value.summary.conducted != 40L)
+                while (value.summary.dutyLeave != 1L)
                 value
             }
+            assertEquals(40L, changed.summary.conducted)
             assertEquals(38L, changed.summary.credited)
             assertEquals(2L, changed.summary.safeSkips)
         } finally { collection.cancel(); channel.close() }
@@ -652,7 +883,7 @@ class RoomNinetyRepositoryTest {
             backup.copy(semesters = listOf(backup.semesters.first().copy(id = "broken"))),
             backup.copy(semesters = listOf(backup.semesters.first().copy(startDay = Long.MAX_VALUE))),
             backup.copy(balances = listOf(backup.balances.first().copy(present = Long.MAX_VALUE,
-                approvedDl = Long.MAX_VALUE)) + backup.balances.drop(1)),
+                dutyLeave = Long.MAX_VALUE)) + backup.balances.drop(1)),
         )
         invalid.forEachIndexed { index, bad ->
             val bytes = json.encodeToString(BackupFile.serializer(), bad).toByteArray()

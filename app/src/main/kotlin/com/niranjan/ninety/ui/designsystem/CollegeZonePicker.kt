@@ -3,19 +3,16 @@ package com.niranjan.ninety.ui.designsystem
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,22 +20,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.niranjan.ninety.R
 import java.time.ZoneId
 
 @Composable
-fun CollegeZoneAction(zoneId: String, showPhoneSummary: Boolean = true, enabled: Boolean = true,
-    onClick: () -> Unit) {
-    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
-        Text(when {
-            !showPhoneSummary -> stringResource(R.string.edit_college_zone, zoneId)
-            zoneId == ZoneId.systemDefault().id -> stringResource(R.string.times_follow_phone)
-            else -> stringResource(R.string.college_zone_change, zoneId)
-        })
-    }
+fun CollegeZoneAction(zoneId: String, enabled: Boolean = true, onClick: () -> Unit) {
+    ActionRow(R.drawable.ic_clock, stringResource(R.string.college_timezone), onClick,
+        enabled = enabled, showChevron = true,
+        supportingText = if (zoneId == ZoneId.systemDefault().id) stringResource(R.string.phone_timezone)
+            else zoneId)
 }
 
 @Composable
@@ -60,14 +56,12 @@ fun CollegeZonePicker(zoneId: String, onSelect: (String) -> Unit, onDismiss: () 
 
     Column(modifier.fillMaxSize().imePadding().padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(R.string.college_timezone), style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.alignByBaseline())
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp).alignByBaseline()) {
-                Text(stringResource(R.string.cancel))
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CapsText(stringResource(R.string.college_timezone), style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f).semantics { heading() })
+            ActionIcon(R.drawable.ic_close, stringResource(R.string.cancel), onDismiss)
         }
-        OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(),
+        NinetyTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(),
             label = { Text(stringResource(R.string.search_timezones)) }, singleLine = true)
         if (matches.isEmpty()) Text(stringResource(R.string.no_timezones_found))
         LazyColumn(Modifier.weight(1f), state = listState) {

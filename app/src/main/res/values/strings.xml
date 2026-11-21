@@ -1,6 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="semester_start_label">Start date</string>
+    <string name="timetable_effective_label">Effective date</string>
+    <string name="reminder_time">Reminder time</string>
     <string name="app_name">Ninety</string>
     <string name="today">Today</string>
+    <string name="back_to_today">Back to today</string>
+    <string name="open_full_day">Open full day</string>
+    <string name="close_attendance_sheet">Close attendance</string>
     <string name="courses">Courses</string>
     <string name="calendar">Calendar</string>
     <string name="day">Day</string>
@@ -11,30 +17,14 @@
     <string name="semester_current_started">%1$s · Current</string>
     <string name="semester_unavailable">Semester unavailable</string>
     <string name="semester_name">Semester name</string>
-    <string name="edit_semester">Rename or change start date or timezone</string>
+    <string name="edit_semester">Edit semester</string>
     <string name="before_semester_start">Before the semester started</string>
     <string name="course_unavailable">Course unavailable</string>
     <string name="open_course">Open %1$s</string>
     <string name="attendance_breakdown">Attendance breakdown</string>
-    <string name="rename">Rename</string>
-    <string name="rename_course">Rename %1$s</string>
     <string name="attendance_before_tracking_action">Attendance before tracking</string>
     <string name="attendance_so_far">Attendance so far</string>
     <string name="course_added_timetable">Added. Put it on the timetable?</string>
-    <string name="duty_leave_for_course">Duty leave for this course</string>
-    <string name="duty_leave_count_rejected">Duty leave — rejected</string>
-    <string name="duty_leave_before_tracking">From before you started tracking</string>
-    <string name="remove_request">Remove request</string>
-    <string name="remove_duty_leave_question">Remove duty leave request?</string>
-    <string name="remove_duty_leave_body">All periods in this request will return to not marked.</string>
-    <plurals name="duty_leave_periods_pending">
-        <item quantity="one">%1$d period pending</item>
-        <item quantity="other">%1$d periods pending</item>
-    </plurals>
-    <plurals name="duty_leave_periods_approved">
-        <item quantity="one">%1$d period approved</item>
-        <item quantity="other">%1$d periods approved</item>
-    </plurals>
     <string name="duty_leave">Duty leave</string>
     <string name="settings">Settings</string>
     <string name="timetable">Timetable</string>
@@ -47,31 +37,26 @@
     <string name="open_settings">Open Settings</string>
     <string name="back">Back</string>
     <string name="undo">Undo</string>
-    <string name="apply_duty_leave">Add duty leave</string>
     <string name="present">Present</string>
     <string name="absent">Absent</string>
     <string name="not_marked">Not marked</string>
     <string name="not_held">Not held</string>
     <string name="does_not_count">Doesn\'t count</string>
-    <string name="duty_leave_pending">Duty leave pending</string>
-    <string name="duty_leave_approved">Duty leave approved</string>
-    <string name="duty_leave_rejected">Duty leave rejected</string>
     <string name="class_not_held">Class not held</string>
     <string name="restore_class">Restore class</string>
-    <string name="different_course">Different course was taught</string>
+    <string name="different_course">Substitute course</string>
     <string name="clear_mark">Clear mark</string>
     <string name="remove_extra_class">Remove extra class</string>
     <string name="no_classes_today">No classes today (holiday)</string>
     <string name="add_extra_class">Add an extra class</string>
-    <string name="working_day">Working day? Use a weekday timetable</string>
+    <string name="working_day">Use a weekday timetable</string>
     <string name="edit_timetable">Edit timetable</string>
-    <string name="no_timetable_classes">No classes on your timetable for this day.</string>
-    <string name="holiday_classes">Holiday — classes don\'t count</string>
-    <string name="following_timetable">Following %1$s\'s timetable</string>
-    <string name="day_timetable_edited">Timetable edited for this day</string>
-    <string name="mark_future_day">You can mark this day once it arrives</string>
-    <string name="duty_leave_credit">Counts as attended until it\'s approved or rejected</string>
-    <string name="no_weekend_classes">No classes on weekends</string>
+    <string name="no_timetable_classes">No classes scheduled</string>
+    <string name="holiday_classes">Holiday</string>
+    <string name="following_timetable">%1$s timetable</string>
+    <string name="day_timetable_edited">Edited timetable</string>
+    <string name="mark_future_day">Attendance opens on this date.</string>
+    <string name="no_weekend_classes">No classes scheduled</string>
     <string name="all_marked" tools:ignore="PluralsCandidate">All %1$d marked · %2$d present · %3$d absent</string>
     <string name="day_duty_leave_total">%1$s · %2$d on duty leave</string>
     <string name="mark_progress" tools:ignore="PluralsCandidate">%1$d of %2$d marked</string>
@@ -80,7 +65,7 @@
     <string name="remove_holiday_question">Remove holiday?</string>
     <string name="mark_holiday">Mark holiday</string>
     <string name="replace_attendance">Replace recorded attendance?</string>
-    <string name="replace_attendance_body">Some selected periods already have a mark. Applying duty leave replaces those marks with pending duty leave. You can undo this change.</string>
+    <string name="replace_attendance_body">Duty leave will replace these marks. You can undo this.</string>
     <string name="replace">Replace</string>
     <string name="done">Done</string>
     <string name="cancel">Cancel</string>
@@ -89,9 +74,9 @@
         <item quantity="one">%1$d period</item>
         <item quantity="other">%1$d periods</item>
     </plurals>
-    <plurals name="apply_periods">
-        <item quantity="one">Apply to %1$d period</item>
-        <item quantity="other">Apply to %1$d periods</item>
+    <plurals name="mark_periods">
+        <item quantity="one">Mark %1$d period</item>
+        <item quantity="other">Mark %1$d periods</item>
     </plurals>
     <plurals name="added_periods">
         <item quantity="one">Added %1$d period.</item>
@@ -101,65 +86,44 @@
         <item quantity="one">%1$d you had already marked was left as it was.</item>
         <item quantity="other">%1$d you had already marked were left as they were.</item>
     </plurals>
-    <string name="approve">Approve</string>
-    <string name="reject">Reject</string>
-    <string name="change_all_approvals">Change</string>
-    <string name="pending">Pending</string>
-    <string name="approved">Approved</string>
-    <string name="rejected">Rejected</string>
-    <string name="pending_approval">Pending approval</string>
-    <string name="mixed_approval">Mixed approval</string>
-    <string name="no_duty_leave">No duty leave yet.</string>
-    <string name="leave_summary">%1$s on %2$s · %3$s</string>
-    <string name="leave_event_summary">%1$s · %2$s · %3$s</string>
-    <string name="leave_breakdown" tools:ignore="PluralsCandidate">%1$d pending · %2$d approved · %3$d rejected</string>
     <string name="before_tracking">Attendance before you started tracking</string>
     <string name="view_periods">View periods</string>
     <string name="hide_periods">Hide periods</string>
-    <string name="change_approval">Change approval</string>
-    <string name="attendance_minimum">90 % minimum</string>
+    <string name="attendance_minimum">90% minimum</string>
+    <string name="no_tracked_courses">No tracked courses</string>
+    <plurals name="course_recovery_compact">
+        <item quantity="one">Attend the next %1$d period</item>
+        <item quantity="other">Attend the next %1$d periods</item>
+    </plurals>
+    <string name="course_unmarked_compact" tools:ignore="PluralsCandidate">%1$d unmarked</string>
     <string name="attendance_rules_title">How attendance is calculated</string>
-    <string name="attendance_rules_credit">Each course has a 90% minimum. Present periods and approved duty leave earn credit. Pending duty leave counts until it’s rejected. Absences and rejected duty leave count as held periods without credit.</string>
-    <string name="attendance_rules_exclusions">Future periods, unmarked periods, holidays and classes not held are left out. Extra classes count only if you turn on attendance counting and mark them.</string>
-    <string name="attendance_rules_allowance">“Can miss” is measured in periods. Missing a three-period lab uses three periods of your allowance.</string>
+    <string name="attendance_rules_credit">Each course needs 90%. Present and duty leave periods earn attendance credit.</string>
+    <string name="attendance_rules_exclusions">Future periods, unmarked periods, holidays, and cancelled classes are excluded. Extras count when enabled and marked.</string>
+    <string name="attendance_rules_allowance">“Can miss” is measured in periods. A three-period lab uses three.</string>
     <string name="no_absences_to_spare">No absences to spare</string>
     <string name="no_attendance_recorded">No attendance recorded</string>
-    <string name="course_standing_summary" tools:ignore="PluralsCandidate">%1$d below 90 %% · %2$d at the limit</string>
-    <string name="attendance_if_leave_rejected">%1$s if leave is rejected</string>
-    <plurals name="provisional_allowance">
-        <item quantity="one">%1$s (counting %2$d pending duty-leave period)</item>
-        <item quantity="other">%1$s (counting %2$d pending duty-leave periods)</item>
-    </plurals>
     <plurals name="catch_up_earlier_days">
         <item quantity="one">%1$d earlier day not marked · Catch up</item>
         <item quantity="other">%1$d earlier days not marked · Catch up</item>
     </plurals>
-    <string name="courses_unmarked_note">Some earlier days aren’t marked. Percentages may be off.</string>
+    <string name="courses_unmarked_note">Unmarked periods may affect percentages.</string>
     <plurals name="course_unmarked_periods">
-        <item quantity="one">%1$d period not marked · Percentage may be off</item>
-        <item quantity="other">%1$d periods not marked · Percentage may be off</item>
+        <item quantity="one">%1$d period not marked</item>
+        <item quantity="other">%1$d periods not marked</item>
     </plurals>
     <string name="no_longer_tracked">No longer tracked</string>
-    <string name="stop_tracking_course">Stop tracking this course</string>
+    <string name="stop_tracking_course">Stop tracking</string>
     <string name="stop_tracking_question">Stop tracking %1$s?</string>
-    <string name="stop_tracking_body">It comes off your timetable from tomorrow. Everything marked so far is kept. You can’t undo this in the app.</string>
+    <string name="stop_tracking_body">Leaves the timetable tomorrow. Past marks stay. You can resume tracking.</string>
     <string name="counted_as_attended">Counted as attended: %1$d of %2$d</string>
     <string name="attended_in_person">Attended in person</string>
-    <string name="without_pending_leave">Without pending duty leave</string>
-    <string name="pending_before_tracking">Pending duty leave before you started tracking</string>
-    <string name="weekly_timetable_row">%1$s · %2$s</string>
-    <string name="weekdays_range">Mon–Fri</string>
     <plurals name="day_count">
         <item quantity="one">%1$d day</item>
         <item quantity="other">%1$d days</item>
     </plurals>
-    <plurals name="request_count">
-        <item quantity="one">%1$d request</item>
-        <item quantity="other">%1$d requests</item>
-    </plurals>
     <plurals name="attend_next_periods">
-        <item quantity="one">Attend the next %1$d period to reach 90 %%</item>
-        <item quantity="other">Attend the next %1$d periods to reach 90 %%</item>
+        <item quantity="one">Attend the next %1$d period to reach 90\u00a0%%</item>
+        <item quantity="other">Attend the next %1$d periods to reach 90\u00a0%%</item>
     </plurals>
     <plurals name="can_miss_periods">
         <item quantity="one">Can miss %1$d period</item>
@@ -170,7 +134,6 @@
         <item quantity="other">%1$d periods a week</item>
     </plurals>
     <string name="effective_from">Changes apply from %1$s</string>
-    <string name="effective_date_help">Earlier days keep the old timetable.</string>
     <string name="effective_date_past">Choose today or a later date.</string>
     <string name="no_timetable">No timetable yet</string>
     <string name="earlier_versions">Earlier versions</string>
@@ -195,8 +158,6 @@
     </plurals>
     <string name="tracking_starts_on">Tracking starts on: %1$s</string>
     <string name="classes_held">Classes held</string>
-    <string name="duty_leave_count_approved">Duty leave — approved</string>
-    <string name="duty_leave_count_pending">Duty leave — pending</string>
     <string name="choose_date">Choose a date</string>
     <string name="choose_tracking_date">Choose the date tracking starts.</string>
     <string name="tracking_date_after_start">Choose a tracking start date after the semester start.</string>
@@ -222,7 +183,6 @@
         <item quantity="one">%1$d course</item>
         <item quantity="other">%1$d courses</item>
     </plurals>
-    <string name="display_feedback">Display &amp; feedback</string>
     <string name="theme">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
@@ -236,8 +196,8 @@
     <string name="make_current">Make current</string>
     <string name="semester_started">Started %1$s</string>
     <string name="semester_started_finished_on">%1$s · Finished %2$s</string>
-    <string name="save_backup">Save a backup</string>
-    <string name="restore_backup">Restore from a backup</string>
+    <string name="save_backup">Save backup</string>
+    <string name="restore_backup">Restore backup</string>
     <string name="backup_saved">Backup saved</string>
     <string name="backup_write_failed">The backup file could not be written.</string>
     <string name="backup_read_failed">Could not read that file.</string>
@@ -246,14 +206,13 @@
     <string name="backup_date_unknown">Backup date unknown</string>
     <string name="backup_date_time">%1$s, %2$s</string>
     <string name="backup_counts">%1$s · %2$s · %3$s · %4$s</string>
-    <string name="replace_backup_warning">This replaces everything in the app now. Save a backup first if you\'re unsure.</string>
+    <string name="replace_backup_warning">Restoring replaces all current records and settings.</string>
     <string name="replace_my_data">Replace my data</string>
     <string name="backup">Backup</string>
-    <string name="about_privacy">Works offline. Nothing leaves this phone. Back up from Settings.</string>
+    <string name="about_privacy">Works offline. Data stays on this device.</string>
     <string name="semesters">Semesters</string>
     <string name="new_semester">New semester</string>
     <string name="haptic_feedback">Haptic feedback</string>
-    <string name="reminder">Reminder</string>
     <string name="daily_reminder">Daily reminder</string>
     <string name="about_ninety">About Ninety</string>
     <plurals name="semester_count">
@@ -266,7 +225,7 @@
     </plurals>
     <string name="undo_holiday">Undo holiday</string>
     <string name="use_weekday_timetable_menu">Use another day\'s timetable…</string>
-    <string name="choose_weekday_timetable">Which day\'s timetable was followed?</string>
+    <string name="choose_weekday_timetable">Choose a weekday</string>
     <string name="add_extra_class_menu">Add an extra class…</string>
     <string name="duty_leave_menu">Duty leave…</string>
     <string name="mark_holiday_question">Mark this day as a holiday?</string>
@@ -276,18 +235,13 @@
     <string name="class_restored">Class restored</string>
     <string name="day_timetable_updated">Day timetable updated</string>
     <string name="updated_before_tracking">Updated attendance from before you started tracking</string>
-    <string name="approved_before_tracking">Approved duty leave from before tracking</string>
-    <string name="rejected_before_tracking">Rejected duty leave from before tracking</string>
     <string name="tracking_date_not_before_start">Tracking starts on or after the semester start.</string>
-    <string name="before_tracking_unavailable">Attendance before you started tracking is unavailable for this course.</string>
-    <string name="no_pending_before_tracking">There is no pending duty leave from before tracking.</string>
     <string name="only_finish_current">Finish the current semester first.</string>
     <string name="stopped_course_timetable">Courses you stopped tracking cannot stay on the timetable.</string>
     <string name="calendar_marked">Marked</string>
     <string name="calendar_holiday_symbol">H</string>
     <string name="calendar_different_timetable">Different timetable</string>
     <string name="calendar_status_with_timetable">%1$s · Different timetable</string>
-    <string name="incomplete_day_periods" tools:ignore="PluralsCandidate">%1$s · %2$d of %3$d not marked</string>
     <string name="past_days_not_marked">%1$s not marked</string>
     <string name="holiday">Holiday</string>
     <string name="weekend">Weekend</string>
@@ -297,10 +251,7 @@
     <string name="reminder_channel">Attendance reminders</string>
     <string name="reminder_channel_description">Approximate end-of-day reminders to mark attendance.</string>
     <string name="record_today_reminder">Mark today\'s attendance</string>
-    <string name="no_periods_for_leave">There are no periods for duty leave on this day.</string>
     <string name="select_all_periods">Select all periods</string>
-    <string name="replaces_existing_mark">Replaces existing mark</string>
-    <string name="recorded_day_left" tools:ignore="PluralsCandidate">%1$d left</string>
     <string name="no_attendance_to_mark">No attendance to mark</string>
     <string name="hide_schedule">Hide schedule</string>
     <string name="view_schedule">View schedule</string>
@@ -332,36 +283,29 @@
     <string name="extra_class_start">Start time</string>
     <string name="extra_class_end">End time</string>
     <string name="extra_class_time_error">End time must be after start time.</string>
-    <string name="extra_class_excluded">Doesn’t count toward attendance</string>
     <string name="extra_class_add">Add class</string>
     <string name="extra_class_set_time">Set time</string>
     <string name="copy_timetable_from">Copy from…</string>
-    <string name="timetable_chip_help">Pick a course, then tap its periods. Tap again to clear.</string>
+    <string name="timetable_chip_help">Select a course, then tap periods.</string>
     <string name="choose_course_for_period">Choose course for period %1$d</string>
     <string name="numbered_period">Period %1$d</string>
     <string name="extra_class">Extra class</string>
-    <string name="setup_intro">Three short steps: semester, courses, weekly timetable.</string>
-    <string name="setup_midsemester_question">Classes have already started. How do you want to begin?</string>
+    <string name="setup_midsemester_question">How will you record past classes?</string>
     <string name="setup_enter_attendance">Enter my attendance so far (recommended)</string>
     <string name="setup_mark_past_days">Mark every past day myself</string>
     <string name="college_timezone">College timezone</string>
-    <string name="times_follow_phone">Times follow this phone · Change</string>
-    <string name="college_zone_change">%1$s · Change</string>
     <string name="search_timezones">Search timezones</string>
     <string name="no_timezones_found">No matching timezones</string>
     <string name="selected_phone_timezone">This phone · Selected</string>
     <string name="phone_timezone">This phone</string>
     <string name="selected_timezone">Selected</string>
     <string name="empty_timetable_title">Your timetable is empty</string>
-    <string name="empty_timetable_body">No classes will appear until you add them to the timetable.</string>
+    <string name="empty_timetable_body">Add classes later from Timetable.</string>
     <string name="add_timetable_classes">Add classes</string>
     <string name="skip_timetable">Skip for now</string>
     <string name="course_not_on_timetable">Not on the weekly timetable</string>
-    <string name="semester_edit_start_date">Start date · %1$s</string>
-    <string name="semester_start_history_help">The start date must preserve existing attendance history.</string>
-    <string name="edit_college_zone">College timezone · %1$s · Change</string>
     <string name="reopen_requires_no_current">Finish the current semester before reopening this one.</string>
-    <string name="finish_previous_semester_body">You can still view it. Choose Keep paused if you want to make it current again later.</string>
+    <string name="finish_previous_semester_body">You can still view the finished semester. Keep it paused to make it current later.</string>
     <string name="keep_semester_paused">Keep paused</string>
     <string name="paused_semester">Paused</string>
     <string name="semester_paused_summary">%1$s · Paused</string>
@@ -369,15 +313,27 @@
     <string name="section_collapsed">Collapsed</string>
     <string name="cancel_setup">Cancel setup</string>
     <string name="discard_setup">Discard this setup?</string>
-    <string name="discard_setup_body">The semester draft will be discarded.</string>
     <string name="setup_course_removed">Course removed from setup</string>
     <string name="setup_attendance_review">Counted as attended so far · %1$d of %2$d</string>
     <string name="reminder_permission_denied">Allow notifications to get attendance reminders.</string>
-    <plurals name="setup_pending_attendance_review">
-        <item quantity="one">Includes %1$d period of pending duty leave</item>
-        <item quantity="other">Includes %1$d periods of pending duty leave</item>
-    </plurals>
     <string name="edit_semester_heading">Edit semester</string>
     <string name="clear_timetable_course">Clear %1$s</string>
     <string name="assign_timetable_course">Assign %1$s</string>
+    <string name="future_holiday_body">Attendance will not be due on this date.</string>
+    <string name="remove_future_holiday_body">The regular schedule will be available for this date.</string>
+    <string name="resume_tracking">Resume tracking</string>
+    <string name="resume_tracking_body">Add it back to the timetable when ready.</string>
+    <string name="setup_reminder_at">Reminder at %1$s</string>
+    <string name="reminder_all_present">All present</string>
+    <plurals name="reminder_marked_present">
+        <item quantity="one">Marked %1$d period present.</item>
+        <item quantity="other">Marked %1$d periods present.</item>
+    </plurals>
+    <string name="recent_changes">Recent changes</string>
+    <string name="no_recent_changes">No changes to undo.</string>
+    <string name="undo_change_description">Undo: %1$s</string>
+    <string name="last_backup">Last backup: %1$s</string>
+    <string name="backup_never_on_device">Never</string>
+    <string name="backup_reminder_hint">Backup due</string>
+    <string name="before_tracking_unavailable">Attendance before you started tracking is unavailable for this course.</string>
 </resources>

@@ -1,366 +1,363 @@
 ---
-name: Ninety
-description: A quiet, native running order for daily attendance.
-colors:
-  light-primary: '#2457D6'
-  dark-primary: '#8AACFF'
-  light-primary-container: '#E8EEFC'
-  dark-primary-container: '#243653'
-  light-on-primary-container: '#173C91'
-  dark-on-primary-container: '#DCE6FF'
-  dark-on-primary: '#102654'
-  light-background: '#F7F8FA'
-  dark-background: '#101113'
-  light-surface: '#FFFFFF'
-  dark-surface: '#191B1F'
-  light-ink: '#17191D'
-  dark-ink: '#F3F4F6'
-  light-muted: '#626975'
-  dark-muted: '#A5ACB8'
-  light-tonal: '#EFF1F4'
-  dark-tonal: '#25282E'
-  light-divider: '#E3E6EB'
-  dark-divider: '#30343B'
-  light-error: '#B3261E'
-  dark-error: '#FFB4AB'
-  light-error-container: '#FCEDEA'
-  dark-error-container: '#44211F'
-  light-on-error-container: '#8C1D18'
-  dark-on-error-container: '#FFDAD6'
-typography:
-  display-large:
-    fontFamily: Manrope
-    fontSize: 44sp
-    fontWeight: 700
-    lineHeight: 52sp
-    letterSpacing: -1sp
-    fontFeature: tnum
-  display-medium:
-    fontFamily: Manrope
-    fontSize: 38sp
-    fontWeight: 700
-    lineHeight: 46sp
-    letterSpacing: -0.8sp
-    fontFeature: tnum
-  display-small:
-    fontFamily: Manrope
-    fontSize: 32sp
-    fontWeight: 700
-    lineHeight: 40sp
-    letterSpacing: -0.6sp
-    fontFeature: tnum
-  headline-large:
-    fontFamily: Manrope
-    fontSize: 32sp
-    fontWeight: 700
-    lineHeight: 40sp
-    letterSpacing: -0.6sp
-    fontFeature: tnum
-  headline-medium:
-    fontFamily: Manrope
-    fontSize: 28sp
-    fontWeight: 700
-    lineHeight: 36sp
-    letterSpacing: -0.5sp
-    fontFeature: tnum
-  headline-small:
-    fontFamily: Manrope
-    fontSize: 23sp
-    fontWeight: 600
-    lineHeight: 30sp
-    letterSpacing: -0.3sp
-    fontFeature: tnum
-  title-large:
-    fontFamily: Manrope
-    fontSize: 20sp
-    fontWeight: 600
-    lineHeight: 28sp
-    letterSpacing: -0.2sp
-    fontFeature: tnum
-  title-medium:
-    fontFamily: Manrope
-    fontSize: 16sp
-    fontWeight: 600
-    lineHeight: 24sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-  title-small:
-    fontFamily: Manrope
-    fontSize: 14sp
-    fontWeight: 600
-    lineHeight: 20sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-  body-large:
-    fontFamily: Manrope
-    fontSize: 16sp
-    fontWeight: 400
-    lineHeight: 24sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-  body-medium:
-    fontFamily: Manrope
-    fontSize: 14sp
-    fontWeight: 400
-    lineHeight: 22sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-  body-small:
-    fontFamily: Manrope
-    fontSize: 12sp
-    fontWeight: 400
-    lineHeight: 18sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-  label-large:
-    fontFamily: Manrope
-    fontSize: 14sp
-    fontWeight: 600
-    lineHeight: 20sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-  label-medium:
-    fontFamily: Manrope
-    fontSize: 12sp
-    fontWeight: 500
-    lineHeight: 18sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-  label-small:
-    fontFamily: Manrope
-    fontSize: 11sp
-    fontWeight: 500
-    lineHeight: 16sp
-    letterSpacing: 0sp
-    fontFeature: tnum
-rounded:
-  marker: 2dp
-  small: 8dp
-  tab-indicator: 10dp
-  medium: 12dp
-  large: 16dp
-  extra-large: 24dp
-spacing:
-  space-2: 2dp
-  space-4: 4dp
-  space-6: 6dp
-  space-8: 8dp
-  space-10: 10dp
-  space-12: 12dp
-  space-14: 14dp
-  space-16: 16dp
-  space-20: 20dp
-  space-24: 24dp
-  space-32: 32dp
-  space-40: 40dp
-components:
-  primary-action-light:
-    backgroundColor: '{colors.light-primary}'
-    textColor: '{colors.light-surface}'
-    typography: '{typography.label-large}'
-    rounded: '{rounded.medium}'
-    padding: 14dp 20dp
-  primary-action-dark:
-    backgroundColor: '{colors.dark-primary}'
-    textColor: '{colors.dark-on-primary}'
-    typography: '{typography.label-large}'
-    rounded: '{rounded.medium}'
-    padding: 14dp 20dp
-  text-button-light:
-    textColor: '{colors.light-primary}'
-    typography: '{typography.label-large}'
-  icon-action:
-    size: 48dp
-  outlined-field:
-    typography: '{typography.body-large}'
-  filter-choice:
-    typography: '{typography.label-large}'
-  surface-card-light:
-    backgroundColor: '{colors.light-surface}'
-    textColor: '{colors.light-ink}'
-    rounded: '{rounded.large}'
-  surface-card-dark:
-    backgroundColor: '{colors.dark-surface}'
-    textColor: '{colors.dark-ink}'
-    rounded: '{rounded.large}'
-  selected-tab-light:
-    backgroundColor: '{colors.light-primary-container}'
-    textColor: '{colors.light-on-primary-container}'
-    rounded: '{rounded.tab-indicator}'
-    height: 32dp
-    width: 56dp
-  selected-tab-dark:
-    backgroundColor: '{colors.dark-primary-container}'
-    textColor: '{colors.dark-on-primary-container}'
-    rounded: '{rounded.tab-indicator}'
-    height: 32dp
-    width: 56dp
-  outcome-present-light:
-    backgroundColor: '{colors.light-primary-container}'
-    textColor: '{colors.light-on-primary-container}'
-    rounded: '{rounded.small}'
-    padding: 6dp
-  outcome-present-dark:
-    backgroundColor: '{colors.dark-primary-container}'
-    textColor: '{colors.dark-on-primary-container}'
-    rounded: '{rounded.small}'
-    padding: 6dp
-  period-progress:
-    height: 4dp
-    rounded: '{rounded.marker}'
-  schedule-time-rail:
-    width: 52dp
----
+version: alpha
+name: SpaceX-design-analysis
+description: An inspired interpretation of SpaceX's design language — a mission-oriented aerospace brand built on pure black canvas, full-bleed photographic and video heroes of rockets and Mars landscapes, and uppercase D-DIN display type set in tight vertical leading. UI chrome is intentionally minimal: a single ghost outlined pill button per band, all-caps eyebrow microtext, and a fixed top nav over photography. The system is unapologetically austere — black, white, and the imagery itself.
 
-# Design System: Ninety
+colors:
+  primary: "#000000"
+  ink: "#000000"
+  on-primary: "#ffffff"
+  on-primary-mute: "#f0f0fa"
+  canvas-night: "#000000"
+  canvas-night-soft: "#0a0a0a"
+  canvas-light: "#ffffff"
+  canvas-cool: "#f0f0fa"
+  hairline-on-dark: "#3a3a3f"
+  hairline-on-light: "#e0e0e8"
+  link-on-dark: "#ffffff"
+  link-blue-fallback: "#0000ee"
+  ink-mute: "#5a5a5f"
+
+typography:
+  display-xxl:
+    fontFamily: "D-DIN-Bold, Arial Narrow, Arial, Verdana, sans-serif"
+    fontSize: 80px
+    fontWeight: 700
+    lineHeight: 0.95
+    letterSpacing: 1.6px
+  display-xl:
+    fontFamily: "D-DIN-Bold, Arial Narrow, Arial, Verdana, sans-serif"
+    fontSize: 60px
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: 1.2px
+  display-lg:
+    fontFamily: "D-DIN-Bold, Arial Narrow, Arial, Verdana, sans-serif"
+    fontSize: 48px
+    fontWeight: 700
+    lineHeight: 1.25
+    letterSpacing: 0.96px
+  body-lg:
+    fontFamily: "D-DIN, Arial, Verdana, sans-serif"
+    fontSize: 16px
+    fontWeight: 400
+    lineHeight: 1.7
+    letterSpacing: 0.32px
+  body-md:
+    fontFamily: "D-DIN, Arial, Verdana, sans-serif"
+    fontSize: 16px
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: 0.32px
+  button-cap:
+    fontFamily: "D-DIN, Arial, Verdana, sans-serif"
+    fontSize: 13.008px
+    fontWeight: 700
+    lineHeight: 0.94
+    letterSpacing: 1.17px
+  micro-cap:
+    fontFamily: "D-DIN, Arial, Verdana, sans-serif"
+    fontSize: 12px
+    fontWeight: 400
+    lineHeight: 2.0
+    letterSpacing: 0.96px
+  caption:
+    fontFamily: "D-DIN, Arial, Verdana, sans-serif"
+    fontSize: 13.008px
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: 0
+
+rounded:
+  xs: 4px
+  sm: 8px
+  md: 16px
+  pill: 32px
+  full: 9999px
+
+spacing:
+  xxs: 4px
+  xs: 8px
+  sm: 12px
+  md: 16px
+  lg: 18px
+  xl: 24px
+  xxl: 32px
+  huge: 48px
+
+components:
+  button-ghost-on-dark:
+    backgroundColor: "{colors.canvas-night}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.button-cap}"
+    rounded: "{rounded.pill}"
+    padding: 18px 24px
+  button-ghost-on-light:
+    backgroundColor: "{colors.canvas-light}"
+    textColor: "{colors.ink}"
+    typography: "{typography.button-cap}"
+    rounded: "{rounded.pill}"
+    padding: 18px 24px
+  button-filled-cool:
+    backgroundColor: "{colors.canvas-cool}"
+    textColor: "{colors.ink}"
+    typography: "{typography.button-cap}"
+    rounded: "{rounded.pill}"
+    padding: 18px 24px
+  text-input:
+    backgroundColor: "{colors.canvas-light}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.xs}"
+    padding: 12px 16px
+  card-photo-band:
+    backgroundColor: "{colors.canvas-night}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.xs}"
+    padding: 0px
+  card-shop-product:
+    backgroundColor: "{colors.canvas-light}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.sm}"
+    padding: 16px
+  nav-bar-overlay:
+    backgroundColor: "{colors.canvas-night}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.button-cap}"
+    rounded: "{rounded.xs}"
+    padding: 24px 32px
+  link-on-dark:
+    backgroundColor: "{colors.canvas-night}"
+    textColor: "{colors.link-on-dark}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.xs}"
+    padding: 0px
+  link-on-light:
+    backgroundColor: "{colors.canvas-light}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.xs}"
+    padding: 0px
+  footer-dark:
+    backgroundColor: "{colors.canvas-night}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: 32px 24px
+---
 
 ## Overview
 
-**Creative North Star: "Quiet rhythm"**
+SpaceX's design language is an exercise in negation: pure black canvas, white display type set in tight vertical leading and uppercase, full-bleed photography or autoplaying rocket-launch video as the only chrome. There is no brand color beyond black-and-white; there are no decorative shapes; there are no card grids or pricing tables on the marketing pages. Every band is a single full-viewport photograph or video paired with one all-caps headline at `{typography.display-xxl}` (80px D-DIN-Bold) and one ghost-outlined pill CTA. The composition is closer to a film title card than a SaaS landing page.
 
-A quiet running order makes daily attendance easy to scan and record. Full course names, a narrow period/time rail, open rows, and a small set of outline icons carry the interface. Blue identifies action and selection against neutral light or charcoal dark surfaces.
+The brand's depth is photographic. Mars landscapes, rocket exhaust plumes, the F9 booster on a launchpad at sunset — these are the design system. Type sits over them at high opacity with no scrim, no gradient overlay; the photographs are graded so the type lands cleanly. When type does need a background, it sits on `{colors.canvas-night-soft}` (a barely-lifted near-black) with a 1px hairline in `{colors.hairline-on-dark}`.
 
-The owner-pinned character is minimal, clean, uncluttered, and icon-led. Supporting text appears when it changes a decision: provisional credit, missing records, recovery requirements, and destructive confirmations remain explicit. There is no decorative imagery, wallpaper-derived color, or purple/lavender surface language.
+Typography splits between **D-DIN-Bold** for display tiers (uppercase, tight tracking, condensed feel) and **D-DIN** regular for body and button labels. There is no third family — even pricing on the shop site uses the same two cuts. The display sizes are unusually tight in vertical leading (0.95–1.25) and unusually loose in horizontal tracking (1.6px positive at 80px) — the brand feels engineered rather than designed.
 
 **Key Characteristics:**
-- Open time-led rows rather than repeated dashboard cards.
-- Bundled Manrope with tabular numerals and compact hierarchy.
-- Restrained blue, neutral groups, and semantic error color in both themes.
-- Named icon actions; short text for primary and consequential actions.
-
-This is a scan-mode record of the implemented Kotlin/Jetpack Compose app, not a pre-build seed. The frontmatter records authored native values: `dp` is density-independent layout size and `sp` is scalable text size. Neither is a CSS pixel value. Source authority is `app/src/main/kotlin/com/niranjan/ninety/ui/designsystem/Theme.kt`, the shared components in that directory, `ui/NinetyApp.kt`, every screen directory under `ui/`, and `MainActivity.kt`. Reused local spacing values are extracted here as a vocabulary; the app does not define a separate spacing-token object.
-
-The owner’s settled direction is recorded in `.impeccable/surfaces/otlin-com-niranjan-ninety-ui-ninetyapp-kt-4ee6688b.md`; product policy remains in `PRODUCT.md` and `PROJECT_SPEC.md`. No approved comp or generated app raster applies. The native finish review at `.impeccable/review/finish-review.md` says **ship** for its 28 supplied phone captures at normal text size. That review does not establish tablet, enlarged-text, TalkBack, gesture, or animation-performance guarantees. Native screenshots in `docs/screenshots/` carry origin metadata; review fixtures are synthetic and in memory.
+- Single canvas: pure `{colors.canvas-night}` (`#000000`) for marketing; `{colors.canvas-light}` only on the shop site.
+- Display tier in uppercase D-DIN-Bold with positive horizontal tracking (1.6px at 80px) — the brand's typographic signature.
+- Full-bleed photography or autoplaying video as the dominant decorative element; type sits directly on imagery with no scrim.
+- Single ghost-outlined pill CTA per band, at `{rounded.pill}` 32px radius — never filled, never accent-colored.
+- All-caps eyebrow microtext (`{typography.micro-cap}` and `{typography.button-cap}`) with positive 0.96–1.17px tracking — every chrome element shouts in caps.
+- Fixed top nav overlaid on photography — no opaque background, just white-on-image.
+- Tight 0.95 line-height on the 80px display — vertical compression is the engineering aesthetic.
 
 ## Colors
 
-A cool neutral ground and one restrained blue accent remain consistent across the explicit light and dark schemes. Frontmatter values are normative; the names below explain their native role mapping.
+> **Source pages:** home (`/`), `/shop`, `/vehicles/starship`, `/humanspaceflight/overview`, `/mission`.
 
-### Primary
+### Brand & Accent
+The brand has no accent colors. Black and white do all the chromatic work; photography supplies every other hue.
 
-- **Action Blue** (`light-primary` / `dark-primary`): `primary`, used for the main action, selection, active controls, and recorded period markers. Primary-button foreground is `light-surface` in light mode and `dark-on-primary` in dark mode.
-- **Quiet Blue Wash** (`light-primary-container` / `dark-primary-container`): selected-tab and present/approved outcome backgrounds. `onPrimaryContainer` uses the corresponding `on-primary-container` token. Material `secondaryContainer` intentionally aliases these same blue values.
+### Surface
+- **Canvas Night** (`{colors.canvas-night}` — `#000000`): Default marketing canvas. Pure black, no tint.
+- **Canvas Night Soft** (`{colors.canvas-night-soft}` — `#0a0a0a`): Barely-lifted near-black for content sections that need a subtle separation from the pure-black hero.
+- **Canvas Light** (`{colors.canvas-light}` — `#ffffff`): The shop site's product surface.
+- **Canvas Cool** (`{colors.canvas-cool}` — `#f0f0fa`): A pale cool-blue-white used as the secondary surface on the shop site and as the hover-canvas of certain ghost buttons.
+- **Hairline on Dark** (`{colors.hairline-on-dark}` — `#3a3a3f`): 1px borders on dark surface chrome.
+- **Hairline on Light** (`{colors.hairline-on-light}` — `#e0e0e8`): Borders on shop-site cards.
 
-### Neutral
+### Text
+- **On Primary** (`{colors.on-primary}` — `#ffffff`): Default text on dark canvas; the dominant text color across the marketing site.
+- **On Primary Mute** (`{colors.on-primary-mute}` — `#f0f0fa`): Slightly cooled-white used for secondary text on dark surfaces — barely distinguishable from `{colors.on-primary}` but enough to suggest a hierarchy.
+- **Ink** (`{colors.ink}` — `#000000`): Default text on light surfaces (shop site).
+- **Ink Mute** (`{colors.ink-mute}` — `#5a5a5f`): Secondary text on light surfaces.
 
-- **Page Ground** (`light-background` / `dark-background`): scaffold and navigation ground.
-- **Grouped Surface** (`light-surface` / `dark-surface`): cards, fields’ surrounding groups, and base Material surfaces.
-- **Ink** (`light-ink` / `dark-ink`): `onBackground` and `onSurface`; full course names, headings, and primary reading text.
-- **Slate** (`light-muted` / `dark-muted`): `onSurfaceVariant`, secondary/tertiary roles, and the stronger interactive `outline`.
-- **Tonal Group** (`light-tonal` / `dark-tonal`): `surfaceVariant`, high containers, neutral pending/not-counted outcomes, and `tertiaryContainer`. Neutral foregrounds use Ink or Slate according to the native role.
-- **Quiet Divider** (`light-divider` / `dark-divider`): `outlineVariant` and the highest neutral containers. A decorative divider is not the stronger interactive outline.
-
-### Semantic status
-
-- **Error** (`light-error` / `dark-error`): below-minimum percentage, missing-record warnings, input errors, and destructive text actions.
-- **Error Wash** and **Error Ink** (`error-container` / `on-error-container` in each theme): absent and rejected outcome badges.
-- The app does not create separate secondary or tertiary accent hues. Present and approved duty leave share the primary family; pending duty leave and at-the-limit standing use the caution role with explicit labels. The fixed institutional minimum is not a configurable color-coded target.
-
-**The Pinned Palette Rule.** Use the explicit light or dark scheme. System mode chooses the scheme; wallpaper colors never replace it.
-
-**The Useful Color Rule.** Blue marks action, selection, focus, or recorded progress. Error colors mark absence, rejection, validation, missing records, or a course below its minimum. Pending credit stays neutral and named.
+### Link
+- **Link on Dark** (`{colors.link-on-dark}` — `#ffffff`): Underlined inline link on dark canvas.
+- **Link Blue Fallback** (`{colors.link-blue-fallback}` — `#0000ee`): The browser default that appears in unstyled fallback contexts — documented for completeness, not used as a brand color.
 
 ## Typography
 
-**Display Font:** Manrope. **Body and Label Font:** Manrope. Four static Android font resources supply Regular (400), Medium (500), SemiBold (600), and Bold (700). There is no authored fallback stack in Compose; this record does not invent one. Files live in `app/src/main/res/font/`; `res/raw/manrope_license.txt` contains the SIL OFL 1.1 notice, available through Settings → About Ninety → Font license.
+### Font Family
 
-Manrope is a single, open sans voice. All declared text styles enable tabular numerals (`tnum`) so counts, dates, times, and percentages remain steady. Use the frontmatter type roles rather than introducing another display family.
+The display tier is **D-DIN-Bold** — a condensed industrial sans inspired by the German DIN 1451 standard (used on autobahn road signage and engineering blueprints). When unavailable, fall back to **Arial Narrow**, then Arial, then Verdana — the fallback chain prioritizes width compression over ornament.
+
+The UI tier is **D-DIN** (regular weight) — the same family at standard width — used for body, button labels, and captions.
+
+D-DIN is freely available from the **DIN Type Foundry** (and a free version under the same name is widely distributed). For maximum brand fidelity, use D-DIN directly; as a substitute, **Inter** at heavy weights (700+) with letter-spacing of 1.6px positive tracking approximates the rhythm. Avoid serif or humanist sans alternatives.
 
 ### Hierarchy
 
-- **Display and large headline:** the declared large end of the theme is retained in frontmatter; it is not the default page-heading treatment. Phone pages primarily use `headline-medium`.
-- **Headline medium:** page titles and the day name. **Headline small:** course percentages, with an explicit Bold override in `CoursePercentage`.
-- **Title large:** the screen title in the top bar and the completion title; the top bar uses Bold. **Title medium:** full course names and key group labels. **Title small:** muted section labels.
-- **Body large/medium:** fields, readable content, dates in selectable lists, and dialog content. **Body small:** date support, time rails, course type, attendance next step, and brief helper/error context.
-- **Label large/medium/small:** action and choice labels, compact counts, state text, weekday headers, and the small DL label. Sentence case is the normal treatment; period identifiers such as P1 and the product abbreviation DL remain functional labels.
+| Token | Size | Weight | Line Height | Letter Spacing | Use |
+|---|---|---|---|---|---|
+| `{typography.display-xxl}` | 80px | 700 | 0.95 | 1.6px | Hero headline (uppercase) |
+| `{typography.display-xl}` | 60px | 700 | 1.2 | 1.2px | Section opener (uppercase) |
+| `{typography.display-lg}` | 48px | 700 | 1.25 | 0.96px | Sub-section heading (uppercase) |
+| `{typography.body-lg}` | 16px | 400 | 1.7 | 0.32px | Marketing body lead |
+| `{typography.body-md}` | 16px | 400 | 1.5 | 0.32px | Default UI body |
+| `{typography.button-cap}` | 13.008px | 700 | 0.94 | 1.17px | All-caps button label |
+| `{typography.micro-cap}` | 12px | 400 | 2.0 | 0.96px | All-caps eyebrow / nav item |
+| `{typography.caption}` | 13.008px | 400 | 1.5 | 0 | Helper / footer text |
 
-**The Clear State Rule.** Keep full course names and concise uncertainty labels. Icons reduce repeated copy; they do not erase provisional or consequential meaning.
+### Principles
+- **Uppercase across display.** Every display tier renders in uppercase. The brand never uses sentence-case display headlines.
+- **Tight vertical leading on display.** 0.95 at 80px and 1.2 at 60px — the type stacks engineer-tight.
+- **Wide horizontal tracking.** Positive 0.96–1.6px tracking on display sizes; positive 0.96–1.17px on caps eyebrows. The wide tracking is the brand's signature optical air.
+- **No mono.** Code blocks are not part of the brand's typographic system.
+
+### Note on Font Substitutes
+**D-DIN** is freely available (the original DIN-style face under that name is widely distributed). When unavailable, use **Inter** at 700 weight with `letter-spacing: 1.6px`, `text-transform: uppercase`, and `line-height: 0.95` for display sizes — this matches the rhythm. Avoid Helvetica or Arial at default weights — the brand needs the condensed industrial cut. Avoid serif fallbacks entirely.
 
 ## Layout
 
-The native shell uses edge-to-edge drawing with Scaffold insets. Content is a single vertical flow with a repeated horizontal page inset of `space-24`. Screens choose scroll containers for their content: Today and Settings scroll vertically; Courses, course detail, Calendar, and Duty leave use lazy lists. Setup also applies IME padding and scrolls back to the top when the step changes.
+### Spacing System
+- **Base unit**: 8px (with denser sub-units 4 / 12 / 16 / 18 / 24).
+- **Tokens**: `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.md}` 16px · `{spacing.lg}` 18px · `{spacing.xl}` 24px · `{spacing.xxl}` 32px · `{spacing.huge}` 48px.
+- **Section padding**: full-viewport bands on marketing — no internal padding above/below; the photograph IS the section. On the shop site, sections use 48–64px vertical padding.
 
-`ScreenHeading` places the title and optional short detail beside trailing actions; its source uses top `space-16`, bottom `space-20`, an `space-8` horizontal gap, and `space-4` between title and detail. Today uses its own date heading with top `space-12` and bottom `space-24`. Settings groups commonly use `space-16` internal padding; list rows separate with quiet dividers rather than outer cards.
+### Grid & Container
+- Marketing pages have no container — every band is full-viewport-width, full-viewport-height (or close to it) with photography filling the entire frame.
+- Shop product grid: 4-up at desktop, 2-up at tablet, 1-up at mobile.
+- Type sits inside an inner ~1200px reading column centered horizontally over the full-bleed photograph.
 
-The repeated time rail is the width recorded in `schedule-time-rail`. Today uses a `space-14` rail/content gap and vertical row padding; the recurring timetable uses a `space-12` gap, minimum row height (72dp), and vertical `space-12` padding. Course names take remaining width and are not replaced by short codes. Consecutive lab periods group visually and expand into individual records. Calendar is a seven-column month grid with native circular day controls.
-
-### Implemented adaptation
-
-At a shell width of 600dp or more, `NinetyApp.kt` switches the bottom bar to a labeled navigation rail. A 760dp maximum is declared on the NavHost modifier; its chain also uses `fillMaxSize()`, so this record does not claim the maximum has been proven to constrain all parents. Setup is a separate Scaffold. Above font scale 1.3, course percentages stack below the course heading and the compact bottom tabs hide visible labels; semantic tab names remain. Choice controls use FlowRow to wrap whole choices. These are source behaviors, not completed tablet or enlarged-text visual verification.
+### Whitespace Philosophy
+The marketing pages have minimal traditional whitespace — the photograph occupies all space. "Whitespace" here means the dark sky in a rocket photograph or the empty stretch of Martian terrain. Negative space is photographic, not a UI choice. On the shop site whitespace returns to standard 32px grid gutters.
 
 ## Elevation & Depth
 
-The app is visually flat and uses neutral tonal separation rather than authored shadow tokens. `NinetyCard` sets the current `surface` color and a large theme shape; it supplies no custom border or elevation. The compact NavigationBar explicitly sets tonal elevation to zero. Native Material menus, tooltips, dialogs, and modal sheets retain their framework depth and scrim behavior; there is no app-authored shadow scale to extract. The theme’s `surfaceTint` is transparent.
+| Level | Treatment | Use |
+|---|---|---|
+| 0 | Flat | Default — and the only level on marketing surfaces |
+| 1 | Photographic — full-bleed image or video | The primary depth medium; photographs do all the lifting |
 
-**The Tonal Group Rule.** Use open rows for running lists and neutral surface groups where settings, calendar content, or review data need a boundary. Do not turn every row into a bordered card.
+The brand does not use drop shadows, blurs, glows, or gradient overlays. Depth is photographic: a rocket launching at twilight has natural atmospheric depth that no CSS shadow could simulate. When type needs separation from imagery, the image is graded darker rather than scrimmed.
 
-Navigation slides and the selected-tab indicator use an authored 160ms `FastOutSlowInEasing` tween. Outcome backgrounds and period markers use 180ms color tweens. Expandable course and duty-leave sections use Compose `animateContentSize()` with its framework default, not an invented fixed-duration token. These native animations follow Compose’s system animation-duration behavior; still captures do not verify their performance.
+### Decorative Depth
+Photography and autoplaying rocket-launch video are the only decorative depth. There are no illustrations, no icons beyond a few minimal SVG arrow chevrons in nav and CTA hover states.
 
 ## Shapes
 
-Soft, modest corners support the native controls. Theme small, medium, large, and extra-large shapes are in frontmatter. PrimaryAction explicitly uses medium; NinetyCard explicitly uses large. OutcomeChip uses small. Compact tab indicators have their own rounded rectangle shape, and progress segments use the marker shape. CircleShape is used for calendar days, the completion check, and some progress tracks. Do not apply the extra-large token indiscriminately to ordinary rows; Material dialogs and sheets keep their native component shape behavior.
+### Border Radius Scale
 
-Authored outline vectors in `app/src/main/res/drawable/` use a 24-unit viewport, round caps/joins, and a consistent stroke (1.7 viewport units in the sampled control icons). Runtime Material tint supplies their color. Typical action glyphs are 22dp inside ActionIcon; compact navigation glyphs are 24dp, rail glyphs 22dp, primary-action glyphs 20dp, and outcome glyphs 18dp. The launcher mark is a separate identity asset.
+| Token | Value | Use |
+|---|---|---|
+| `{rounded.xs}` | 4px | Form inputs (shop site) |
+| `{rounded.sm}` | 8px | Shop product card chrome, video frames |
+| `{rounded.md}` | 16px | Larger surface chrome |
+| `{rounded.pill}` | 32px | Ghost outlined pill CTAs (the brand's signature button shape) |
+| `{rounded.full}` | 9999px | Circular play-button overlays on video frames |
+
+### Photography Geometry
+Every photograph is full-viewport-bleed, edge-to-edge, never inset in a card on the marketing site. On the shop site, product photography sits inside `{rounded.sm}` 8px containers with no shadow. Aspect ratios on marketing photography vary with the source image — there is no enforced ratio; the photograph leads.
 
 ## Components
 
 ### Buttons
 
-**PrimaryAction** is a concise icon-plus-label commitment. It uses the current scheme’s primary/onPrimary pair, theme medium corners, a minimum height (52dp), vertical `space-14` / horizontal `space-20` padding, a 20dp glyph, and `space-10` icon/text gap. Its minimum height is a constraint, not a guaranteed fixed size. Enabled/disabled treatment and interaction feedback come from Material Button.
+**`button-ghost-on-dark`** — the universal CTA on marketing surfaces.
+- Background `{colors.canvas-night}` (transparent against the photographed canvas), 1px solid `{colors.on-primary}` border, text `{colors.on-primary}`, type `{typography.button-cap}` (uppercase, 13px / 700 / 1.17px tracking), padding `{spacing.lg} {spacing.xl}` (18px 24px), rounded `{rounded.pill}` 32px.
 
-**TextButton** carries secondary actions and dialog Save/Cancel controls. Destructive ConfirmDialog text uses `error`. **OutlinedButton** appears for the explicit Absent sheet action; it retains Material defaults and a minimum height (52dp). These variants do not define custom app-wide hover states.
+**`button-ghost-on-light`** — the same button on shop / light pages.
+- Background `{colors.canvas-light}` (transparent against light canvas), 1px solid `{colors.ink}` border, text `{colors.ink}`, otherwise identical.
 
-**ActionIcon** is an authored vector in a 48dp IconButton with a 22dp glyph, an accessible label, and a native PlainTooltip. Default tint is `onSurfaceVariant`; disabled tint multiplies alpha by 0.38. Primary actions can request primary tint. Material ripple/focus interactions remain native.
+**`button-filled-cool`** — fill variant on shop product cards.
+- Background `{colors.canvas-cool}`, text `{colors.ink}`, same pill geometry. Used as "Add to cart" or similar product CTAs.
 
-### Chips
+### Cards & Containers
 
-**FilterChip** is the native choice control used by ChoiceRow, weekdays, theme choices, and form options. ChoiceRow uses `space-8` horizontally / `space-4` vertically and a minimum height (48dp); weekday chips use a `space-6` gap. Choice state comes from Material selection semantics and the pinned scheme. Default FilterChip shape, stroke, and interaction treatments are inherited from the linked Material 3 version; they are not custom radius/border tokens.
+**`card-photo-band`** — full-bleed photographic band on marketing pages.
+- Background `{colors.canvas-night}`, padding 0, rounded `{rounded.xs}`. The photograph fills the entire band; type and CTA sit overlaid.
 
-**OutcomeChip** is a compact state badge, not a filter. It has small corners, `space-6` padding, an 18dp state vector, and a semantic full-state description. Present and approved use Quiet Blue Wash, absent and rejected use Error Wash, and pending uses the caution role. Not marked, not held, and non-counting periods use neutral containers. The clock/check/cross/minus prevents color from carrying state alone.
+**`card-shop-product`** — product card on the shop site.
+- Background `{colors.canvas-light}`, padding `{spacing.md}` 16px, rounded `{rounded.sm}` 8px, 1px `{colors.hairline-on-light}` border. Product photo on top, name in `{typography.body-md}`, price in `{typography.body-md}` 700 weight, "Add to cart" button at the bottom.
 
-### Cards / Containers
+### Inputs & Forms
 
-**NinetyCard** groups Settings, calendar, review, and selected attention content on the scheme’s surface with large corners. The wrapper adds no universal padding; the caller commonly uses `space-16` (calendar vertical padding uses `space-12`). Today, Courses, and Duty Leave primarily use open rows. “Card” in a Kotlin function name does not establish a boxed card visually; Course rows are full-width controls with a bottom divider. A tap opens the course detail and its labelled actions.
-
-### Inputs / Fields
-
-**OutlinedTextField** uses Material’s native label, outline, focus, error, and disabled treatments under NinetyTheme. The app authors field content, error text, single-line behavior, keyboard options, and layout, but does not supply a custom universal field radius, stroke width, or focus glow. Course editors use a scrollable AlertDialog body with explicit Save/Cancel and disable Save for a blank name. Date fields open the native Material DatePickerDialog through NinetyDatePicker; FieldButton pairs a short label with a text action.
+**`text-input`** — form input on the shop site.
+- Background `{colors.canvas-light}`, text `{colors.ink}`, type `{typography.body-md}`, padding `{spacing.sm} {spacing.md}` (12px 16px), rounded `{rounded.xs}` 4px, 1px `{colors.hairline-on-light}` border.
 
 ### Navigation
 
-The compact bar has four always-labelled tabs for Today, Courses, Calendar, and Settings. Its height grows with font scale. Re-selecting a tab returns to its root. Re-selecting Today also returns to the current date. The selected tonal indicator is 32dp high and up to 56dp wide (bounded by tab width); it moves with the native slide timing. Each tab has `Role.Tab`, a full accessible name, ripple feedback, and an authored 1dp primary focus border around its icon area. Back returns from detail destinations to the previous screen. The large-width rail uses Material NavigationRailItem with visible labels.
+**`nav-bar-overlay`** — top nav across the marketing site.
+- Background `{colors.canvas-night}` (transparent over the hero photo), text `{colors.on-primary}`, type `{typography.button-cap}` (uppercase). Logo wordmark on the left at ~147×19px, nav items horizontal in caps, padding `{spacing.xl} {spacing.xxl}` (24px 32px). The nav is fixed/sticky on scroll, retaining the overlay treatment.
 
-Each main screen has its own top-bar title. The semester name below it opens a labelled switcher when multiple semesters exist. A banner identifies a browsed semester and provides a direct return to the current one. Courses hosts **Timetable** and **Duty leave** rows above the courses. Course detail collects provisional credit, attendance breakdown, dates that are not marked, and labelled course actions. Duty leave uses an always-visible status line and a separate section for leave from before tracking began. Settings lists semesters as labelled rows with a start date and status. A semester detail screen holds **View records**, **Rename or change start date or timezone**, and the applicable **Finish semester**, **Reopen**, or **Make current** actions. The edit form keeps the start-date history rule near the date control. Finishing preserves records, and a finished semester can be reopened when there is no current semester. Creating a new semester asks whether to finish the existing one at the point of saving the new semester. Keeping it paused exposes **Make current**. About Ninety remains in Settings.
+### Signature Components
 
-### Period progress and running rows
+**Full-Bleed Photo / Video Hero** — every marketing band is a full-viewport photograph or autoplaying rocket-launch video. Type and CTA sit overlaid on the photograph at high opacity with no scrim. The photograph is graded so type lands cleanly without an overlay layer.
 
-**PeriodProgress** is functional progress: one equal-width marker per eligible period, capped to 24 visible markers for larger totals, with exact recorded/total semantics. Markers are 4dp high with a 5dp gap; filled markers use primary and remaining markers use outlineVariant. Setup reuses it for the actual four-step sequence. Completion replaces the main recording action with the check, recorded count, and review affordance; the track is not a permanent decoration.
+**Uppercase Display Headline** — the 80px D-DIN-Bold uppercase headline with 1.6px positive tracking is the brand's most recognizable typographic moment. Always uppercase, always bold-weight, always positively tracked.
 
-**WeeklySchedule / Today rows** pair the narrow period/time rail with a full course name and concise actions. Today’s grouped labs expose per-period outcomes inline. In setup and the recurring timetable editor, select a course chip and tap its periods to assign it or clear a matching assignment. The course menu is available from the period row or its labelled picker button while a chip is selected. **Copy from…** replaces the selected weekday’s six periods with the chosen weekday. Today-effective changes show marked periods that will be kept, with **Save anyway** and **Cancel**.
+**`link-on-dark`** — inline links on dark canvas.
+- Text `{colors.link-on-dark}` (white) with persistent underline.
 
-### Setup and stopped courses
+**`link-on-light`** — inline links on light canvas.
+- Text `{colors.ink}` with persistent underline.
 
-The first setup step introduces the three inputs. A compact timezone action opens a searchable list of available zones. A start date more than three days back reveals a radio group for entering attendance so far or marking past days individually. The recommended option opens **Attendance so far** in each course form and prefills **Tracking starts on** with the college’s current date. The review identifies unscheduled courses and offers an optional reminder. Continuing with an empty timetable takes an explicit **Skip for now** choice.
-
-**Stop tracking this course** has a confirmation that explains what happens to the timetable and existing records. Stopped course rows remain available in **No longer tracked**, collapsed by default and announced as expanded or collapsed by assistive technology.
-
-`.impeccable/design.json` extends this record with color metadata, synthesized display ramps, native motion/breakpoint metadata, and ten self-contained web preview tiles. Those HTML/CSS tiles are documentation translations of Compose components: native dp/sp are illustrated in CSS px, local Manrope is requested with a browser sans fallback, and web hover/focus rules illustrate interactivity. They do not define native interaction tokens, replace source code, or establish pixel fidelity.
+**`footer-dark`** — site-wide footer.
+- Background `{colors.canvas-night}`, text `{colors.on-primary}`, type `{typography.caption}`, padding `{spacing.xxl} {spacing.xl}` (32px 24px). Holds nav columns in `{typography.micro-cap}` (uppercase), and a small legal/copyright row at the bottom.
 
 ## Do's and Don'ts
 
-### Do:
-- Do use the pinned light and dark schemes and the shared Manrope hierarchy.
-- Do keep full course names, period-based counts, and short provisional or incomplete-state labels.
-- Do use the authored outline vectors and supply an accessible name for each icon action.
-- Do retain concise text on the primary action and on save, cancel, restore, and destructive decisions.
-- Do reuse open rows, the time rail, tonal grouping, and native Material interaction behavior.
-- Do validate new layouts on the target device; source adaptations are not proof of tablet, enlarged-text, or TalkBack behavior.
+### Do
+- Use full-bleed photography or autoplaying video as the dominant decorative element on every marketing band.
+- Render display tiers in uppercase D-DIN-Bold with positive 0.96–1.6px letter-spacing — the wide tracking is the signature.
+- Use a single `{button-ghost-on-dark}` per band — the brand does NOT show two CTAs side by side on marketing surfaces.
+- Pair every photograph with type that respects the imagery — no scrims, no gradients, no overlays. Grade the photo, not the canvas.
+- Keep nav overlay-style (transparent, white-on-image) on marketing pages.
 
-### Don't:
-- Don't introduce wallpaper dynamic color, purple/lavender surfaces, or additional decorative accents.
-- Don't add explanatory paragraphs, decorative imagery, ornamental progress, or repeated bordered dashboard cards.
-- Don't replace authored vectors with text glyphs, emoji, or icon fonts.
-- Don't make pending credit look confirmed or hide missing-record and below-minimum states to simplify a screen.
-- Don't treat documentation HTML previews as app code or pixel-accurate native renders.
+### Don't
+- Don't introduce brand accent colors — black, white, and photography are the entire palette.
+- Don't use drop shadows or gradient overlays on dark canvas — they fight the photography.
+- Don't render display tiers in sentence-case or title-case — uppercase is the brand.
+- Don't put filled buttons on marketing surfaces — the ghost outlined pill is the only marketing CTA.
+- Don't use serif or humanist sans alternatives — the condensed industrial DIN cut is non-negotiable.
 
-No material craft-floor defect was reported in the supplied phone review. Unverified device classes, enlarged text, TalkBack, live gestures, and animation performance are verification limits, not design-system rules or repaired defects. Native source sampling and the absence of a web detector are not a claim of exhaustive policy or accessibility certification.
+## Responsive Behavior
+
+### Breakpoints
+
+| Name | Width | Key Changes |
+|---|---|---|
+| Wide | ≥ 1500px | Full hero photograph; max-content type column at 1200px |
+| Desktop | 1280–1499px | Default desktop layout |
+| Laptop | 961–1279px | Type column tightens; photo crops adjust |
+| Tablet | 768–960px | Display drops 80 → 60px; nav compresses |
+| Mobile | 600–767px | Display drops to 48px; ghost button retains pill shape |
+| Small Mobile | < 600px | Display drops to 40px; nav becomes hamburger |
+
+### Touch Targets
+- Ghost pill buttons hit ≥ 50×50px due to the 18px vertical padding × 13px line-height. WCAG AAA compliant.
+- Form fields stay at the 44px minimum height.
+
+### Collapsing Strategy
+- Display sizes stair-step 80 → 60 → 48 → 40px through the breakpoints.
+- Photography re-crops to focal subject on smaller widths (rocket centered, Mars landscape centered).
+- Top nav collapses to hamburger below 768px; menu retains the dark overlay treatment.
+- Shop product grid stair-steps 4-up → 2-up → 1-up.
+
+### Image Behavior
+Marketing photography uses `srcset` for desktop / tablet / mobile with art-direction crops at major breakpoints. Mobile crops favor the central focal subject; wide crops favor environmental context (full launch pad, full Martian horizon).
+
+## Iteration Guide
+
+1. Focus on ONE component at a time.
+2. Reference component names and tokens directly (`{colors.canvas-night}`, `{button-ghost-on-dark}`, `{rounded.pill}`).
+3. Run `npx @google/design.md lint DESIGN.md` after edits.
+4. Add new variants as separate entries.
+5. Default body to `{typography.body-md}`; reserve `{typography.body-lg}` for marketing leads.
+6. The black-and-white-only rule is load-bearing — adding a brand accent color breaks the system.
+7. Ghost pill is the only marketing CTA; filled buttons live exclusively on the shop site.

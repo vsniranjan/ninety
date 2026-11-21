@@ -7,7 +7,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.niranjan.ninety.data.NinetyRepository
-import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
 
@@ -20,13 +19,12 @@ private const val WORK_NAME = "ninety.evening_reminder"
 class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as com.niranjan.ninety.NinetyApplication
-        val repository = app.container.repository
-        return ReminderNotifier.runCheck(applicationContext, repository)
+        ReminderNotifier.runCheck(applicationContext, app.container.repository, app.container.clock)
+        return Result.success()
     }
 
     companion object {
         suspend fun schedule(context: Context, repository: NinetyRepository) {
-            val app = context.applicationContext as com.niranjan.ninety.NinetyApplication
             val state = repository.observeAppState().first()
             val settings = state.settings
             val zone = state.activeSemester?.entity?.collegeZone?.let(java.time.ZoneId::of)

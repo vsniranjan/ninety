@@ -11,14 +11,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,41 +53,48 @@ fun WeeklySchedule(template: WeekTemplate, names: Map<UUID, String>, editable: B
     var selectedCourse by rememberSaveable { mutableStateOf<String?>(null) }
     val armedCourse = selectedCourse?.let(UUID::fromString)?.takeIf { editable && it in names }
     val day = DayOfWeek.of(selectedDay)
-    val railWidth = 52.dp * LocalDensity.current.fontScale.coerceIn(1f, 2f)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    val railWidth = 44.dp * LocalDensity.current.fontScale.coerceIn(1f, 1.75f)
+    Column(verticalArrangement = Arrangement.spacedBy(NinetyDimensions.medium)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(NinetyDimensions.small),
+            verticalArrangement = Arrangement.spacedBy(NinetyDimensions.tight)) {
             collegeWeekdays().forEach { weekday ->
-                FilterChip(selected = weekday == day, onClick = { selectedDay = weekday.value },
+                NinetyChoiceChip(selected = weekday == day, onClick = { selectedDay = weekday.value },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("weekday_${weekday.value}")
                         .semantics { contentDescription = weekday.fullName() },
                     label = { Text(weekday.shortName()) })
             }
         }
         if (editable) {
-            var copyMenu by remember(day) { mutableStateOf(false) }
-            Box {
-                TextButton(onClick = { copyMenu = true }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.copy_timetable_from))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(NinetyDimensions.small)) {
+                Box(Modifier.weight(1f)) {
+                    if (names.isNotEmpty()) Text(stringResource(R.string.timetable_chip_help),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                DropdownMenu(expanded = copyMenu, onDismissRequest = { copyMenu = false }) {
-                    collegeWeekdays().filterNot { it == day }.forEach { source ->
-                        DropdownMenuItem(text = { Text(source.fullName()) }, onClick = {
-                            copyMenu = false
-                            onCopy(source, day)
-                        })
+                Box {
+                    var copyMenu by remember(day) { mutableStateOf(false) }
+                    ActionIcon(R.drawable.ic_copy, stringResource(R.string.copy_timetable_from),
+                        onClick = { copyMenu = true })
+                    NinetyMenu(expanded = copyMenu, onDismissRequest = { copyMenu = false }) {
+                        collegeWeekdays().filterNot { it == day }.forEach { source ->
+                            DropdownMenuItem(text = { Text(source.fullName()) }, onClick = {
+                                copyMenu = false
+                                onCopy(source, day)
+                            })
+                        }
                     }
                 }
             }
-            if (names.isNotEmpty()) {
-                Text(stringResource(R.string.timetable_chip_help), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    names.forEach { (id, label) ->
-                        FilterChip(selected = id == armedCourse,
-                            onClick = { selectedCourse = if (id == armedCourse) null else id.toString() },
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("timetable_course_chip"),
-                            label = { Text(label) })
-                    }
+        }
+        if (editable && names.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(NinetyDimensions.small),
+                verticalArrangement = Arrangement.spacedBy(NinetyDimensions.tight)) {
+                names.forEach { (id, label) ->
+                    NinetyChoiceChip(selected = id == armedCourse,
+                        onClick = { selectedCourse = if (id == armedCourse) null else id.toString() },
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("timetable_course_chip"),
+                        label = { Text(label) })
                 }
             }
         }
@@ -110,14 +114,14 @@ fun WeeklySchedule(template: WeekTemplate, names: Map<UUID, String>, editable: B
                     }
                     var menu by remember(day) { mutableStateOf(false) }
                     Box {
-                        Row(Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp)
                             .then(if (editable) Modifier.clickable(role = Role.Button, onClickLabel = clickLabel) {
                                 if (armedCourse == null) menu = true
                                 else onAssign(day, slot, armedCourse.takeUnless { it == assignedCourse })
                             } else Modifier)
                             .testTag(slotTag).semantics {
                                 contentDescription = description
-                            }.padding(vertical = 12.dp),
+                            }.padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Column(Modifier.width(railWidth), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -136,7 +140,7 @@ fun WeeklySchedule(template: WeekTemplate, names: Map<UUID, String>, editable: B
                             } else if (editable) Icon(painterResource(R.drawable.ic_forward), contentDescription = null,
                                 modifier = Modifier.size(20.dp).rotate(90f), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        NinetyMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text(free) }, onClick = { menu = false; onAssign(day, slot, null) })
                             names.forEach { (id, label) ->
                                 DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; onAssign(day, slot, id) })

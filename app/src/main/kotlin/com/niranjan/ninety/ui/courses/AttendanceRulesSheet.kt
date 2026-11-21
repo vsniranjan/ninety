@@ -21,6 +21,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.niranjan.ninety.R
+import com.niranjan.ninety.ui.designsystem.CapsText
+import com.niranjan.ninety.ui.designsystem.NinetyDimensions
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,13 +30,16 @@ internal fun AttendanceRulesSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = NinetyDimensions.sheet,
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
     ) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(stringResource(R.string.attendance_rules_title), style = MaterialTheme.typography.titleLarge,
+            CapsText(stringResource(R.string.attendance_rules_title), style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.semantics { heading() })
             for (paragraph in listOf(R.string.attendance_rules_credit, R.string.attendance_rules_exclusions,
                 R.string.attendance_rules_allowance)) {

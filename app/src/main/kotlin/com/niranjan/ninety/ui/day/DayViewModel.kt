@@ -83,12 +83,12 @@ class DayViewModel(private val repository: NinetyRepository, private val semeste
         }
     }
 
-    fun applyDutyLeave(sessionIds: List<UUID>, title: String?, replace: Boolean,
+    fun markDutyLeave(sessionIds: List<UUID>, replace: Boolean = false,
         onConflict: (List<UUID>) -> Unit = {}) {
         viewModelScope.launch {
             busy.value = true
-            runCatching { repository.applyDutyLeave(semesterId, sessionIds, title, replace) }
-                .onSuccess { result -> if (result.conflicts.isNotEmpty()) onConflict(result.conflicts) }
+            runCatching { repository.markDutyLeave(semesterId, sessionIds, replace) }
+                .onSuccess { conflicts -> if (conflicts.isNotEmpty()) onConflict(conflicts) }
                 .onFailure { messages.value = it.userMessage() }
             busy.value = false
         }

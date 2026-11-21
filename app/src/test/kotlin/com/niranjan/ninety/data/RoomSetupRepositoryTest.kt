@@ -59,15 +59,15 @@ class RoomSetupRepositoryTest {
         assertEquals(ZoneId.of("Asia/Kolkata"), result.semester.collegeZone)
     }
 
-    @Test fun pendingBalanceIsProvisionalAndConfirmedIsSecondary() = runBlocking {
-        val setup = setup().let { it.copy(balance = it.balance.copy(present = 37, pendingDl = 1)) }
+    @Test fun openingDutyLeaveCreditsAttendance() = runBlocking {
+        val setup = setup().let { it.copy(balance = it.balance.copy(present = 37, dutyLeave = 1)) }
         val repository = RoomSetupRepository(db, clock)
         repository.createInitialSetup(setup)
         val result = repository.overview.first().single().summary
         assertEquals(38L, result.credited)
-        assertEquals(37L, result.confirmedCredited)
+        assertEquals(37L, result.physicallyPresent)
+        assertEquals(1L, result.dutyLeave)
         assertEquals(2L, result.safeSkips)
-        assertTrue(result.isProvisional)
     }
 
     @Test fun repeatedAndConcurrentSetupCannotOverwriteExistingData() = runBlocking {
@@ -95,7 +95,7 @@ class RoomSetupRepositoryTest {
         RoomSetupRepository(db, clock).createInitialSetup(setup())
         val sql = db.openHelper.writableDatabase
         assertThrows(Exception::class.java) {
-            sql.execSQL("UPDATE opening_balance SET pendingDl = 5")
+            sql.execSQL("UPDATE opening_balance SET dutyLeave = 5")
         }
         assertThrows(Exception::class.java) {
             sql.execSQL("UPDATE opening_balance SET conducted = -1")
@@ -159,21 +159,10 @@ class RoomSetupRepositoryTest {
         assertFalse(repo.overview.first().single().semester.completed)
     }
 
-    @Test fun migrationFromDevelopmentSchemaPreservesIdentitiesCountsAndGuards() = runBlocking {
+    @Test fun migrationFromDevelopmentSchemaPreservesIdentitiesAndOrdinaryCounts() = runBlocking {
         db.close()
         context.deleteDatabase(databaseName)
-        val old = SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(databaseName), null)
-        val schema = JSONObject(File("schemas/com.niranjan.ninety.data.NinetyDatabase/1.json").readText()).getJSONObject("database")
-        val entities = schema.getJSONArray("entities")
-        for (i in 0 until entities.length()) {
-            val entity = entities.getJSONObject(i)
-            old.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", entity.getString("tableName")))
-            val indices = entity.optJSONArray("indices") ?: continue
-            for (j in 0 until indices.length()) old.execSQL(indices.getJSONObject(j).getString("createSql")
-                .replace("\${TABLE_NAME}", entity.getString("tableName")))
-        }
-        val setupQueries = schema.getJSONArray("setupQueries")
-        for (i in 0 until setupQueries.length()) old.execSQL(setupQueries.getString(i))
+        val old = openLegacyDatabase(1)
         val original = setup()
         old.execSQL("INSERT INTO semester VALUES (?, ?, ?, ?, ?, 0)", arrayOf<Any>(original.semester.id.toString(), "Semester 5",
             original.semester.startDate.toEpochDay(), LocalDate.of(2026, 12, 31).toEpochDay(), "Asia/Kolkata"))
@@ -188,8 +177,9 @@ class RoomSetupRepositoryTest {
         val repo = RoomSetupRepository(db, clock)
         val restored = repo.overview.first().single()
         assertEquals(original.course.id, restored.course.id)
-        assertEquals(38L, restored.summary.credited)
-        assertEquals(2L, restored.summary.safeSkips)
+        assertEquals(37L, restored.summary.credited)
+        assertEquals(0L, restored.summary.dutyLeave)
+        assertEquals(1L, restored.summary.safeSkips)
         val sql = db.openHelper.writableDatabase
         sql.query("SELECT theme, revision FROM app_settings").use {
             assertTrue(it.moveToFirst()); assertEquals("DARK", it.getString(0)); assertEquals(3, it.getInt(1))
@@ -198,8 +188,73 @@ class RoomSetupRepositoryTest {
             while (it.moveToNext()) assertNotEquals("endDay", it.getString(1))
         }
         sql.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
-        assertThrows(Exception::class.java) { sql.execSQL("UPDATE opening_balance SET pendingDl = 100") }
+        assertThrows(Exception::class.java) { sql.execSQL("UPDATE opening_balance SET dutyLeave = 100") }
         repo.setSemesterCompleted(original.semester.id, true)
         assertTrue(repo.overview.first().single().semester.completed)
+    }
+
+    @Test fun migrationFromVersionThreeDiscardsLegacyLeaveAndUndo() = runBlocking {
+        db.close()
+        context.deleteDatabase(databaseName)
+        val original = setup()
+        val semester = original.semester.id.toString()
+        val course = original.course.id.toString()
+        val day = UUID.randomUUID().toString()
+        val event = UUID.randomUUID().toString()
+        val present = UUID.randomUUID().toString()
+        val absent = UUID.randomUUID().toString()
+        val leave = UUID.randomUUID().toString()
+        val date = original.balance.loggingStartDate.toEpochDay()
+        openLegacyDatabase(3).use { old ->
+            old.execSQL("""INSERT INTO semester (id, name, startDay, collegeZone, archived)
+                VALUES (?, 'Semester 5', ?, 'Asia/Kolkata', 0)""",
+                arrayOf<Any>(semester, original.semester.startDate.toEpochDay()))
+            old.execSQL("""INSERT INTO course (id, semesterId, name, code, normalizedCode, type, retired)
+                VALUES (?, ?, 'Operating Systems', 'CS301', 'CS301', 'THEORY', 0)""", arrayOf(course, semester))
+            old.execSQL("INSERT INTO opening_balance VALUES (?, ?, 40, 37, 1, 1, 7)", arrayOf<Any>(course, date))
+            old.execSQL("INSERT INTO app_settings VALUES (1, ?, 'DARK', 1, 0, 1140, 3)", arrayOf(semester))
+            old.execSQL("INSERT INTO day_instance VALUES (?, ?, ?, 'REGULAR', 0, NULL, 0)", arrayOf<Any>(day, semester, date))
+            for ((index, id) in listOf(present, absent, leave).withIndex()) {
+                old.execSQL("""INSERT INTO session (id, dayId, semesterId, courseId, slot, origin,
+                    counting, startMinute, endMinute, cancelled, pinned, suppressed, revision)
+                    VALUES (?, ?, ?, ?, ?, 'TEMPLATE', 1, 540, 600, 0, 0, 0, 0)""",
+                    arrayOf<Any>(id, day, semester, course, index + 1))
+            }
+            old.execSQL("INSERT INTO dl_event VALUES (?, ?, 'Legacy event', 0)", arrayOf(event, semester))
+            old.execSQL("INSERT INTO attendance_outcome VALUES (?, 'PRESENT', NULL, NULL, 2)", arrayOf(present))
+            old.execSQL("INSERT INTO attendance_outcome VALUES (?, 'ABSENT', NULL, NULL, 3)", arrayOf(absent))
+            old.execSQL("INSERT INTO attendance_outcome VALUES (?, 'DL', 'PENDING', ?, 4)", arrayOf(leave, event))
+            old.execSQL("INSERT INTO change_batch VALUES (?, 'dl_apply', 0, NULL, '{}')", arrayOf(UUID.randomUUID().toString()))
+            old.version = 3
+        }
+
+        db = NinetyDatabase.create(context, databaseName)
+        val sql = db.openHelper.writableDatabase
+        val balance = db.setupDao().balance(course)!!
+        assertEquals(40L, balance.conducted)
+        assertEquals(37L, balance.present)
+        assertEquals(0L, balance.dutyLeave)
+        assertEquals("DARK", db.setupDao().settings()?.theme)
+        assertEquals(mapOf(present to "PRESENT", absent to "ABSENT"),
+            db.journalDao().allOutcomes().associate { it.sessionId to it.kind })
+        assertNotNull(db.journalDao().session(leave))
+        assertTrue(db.journalDao().allBatches().isEmpty())
+        sql.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+    }
+
+    private fun openLegacyDatabase(version: Int): SQLiteDatabase {
+        val old = SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(databaseName), null)
+        val schema = JSONObject(File("schemas/com.niranjan.ninety.data.NinetyDatabase/$version.json").readText()).getJSONObject("database")
+        val entities = schema.getJSONArray("entities")
+        for (i in 0 until entities.length()) {
+            val entity = entities.getJSONObject(i)
+            old.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", entity.getString("tableName")))
+            val indices = entity.optJSONArray("indices") ?: continue
+            for (j in 0 until indices.length()) old.execSQL(indices.getJSONObject(j).getString("createSql")
+                .replace("\${TABLE_NAME}", entity.getString("tableName")))
+        }
+        val setupQueries = schema.getJSONArray("setupQueries")
+        for (i in 0 until setupQueries.length()) old.execSQL(setupQueries.getString(i))
+        return old
     }
 }

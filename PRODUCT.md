@@ -16,20 +16,20 @@ College students managing their own attendance throughout a semester. Students s
 
 ## Product Purpose
 
-Make daily attendance logging fast and forgiving, and help students understand whether each course meets the fixed, inclusive 90% minimum. Show how many additional periods they can miss or must attend to recover, while making provisional credit and incomplete records explicit. Success means trustworthy calculations, little daily effort, and preserved records.
+Make daily attendance logging fast and forgiving, and help students understand whether each course meets the fixed, inclusive 90% minimum. Show how many additional periods they can miss or must attend to recover, while making incomplete records explicit. Success means trustworthy calculations, little daily effort, and preserved records.
 
 ## Positioning
 
-Ninety follows the institution's period-based attendance rules: a short Friday period and a normal period each count as one unit, labs retain separate outcomes for every period, and pending duty leave contributes to the primary attendance and skip figures provisionally. The minimum is fixed per course, rather than a configurable target or a semester-wide average.
+Ninety follows the institution's period-based attendance rules: a short Friday period and a normal period each count as one unit, labs retain separate outcomes for every period, and duty leave earns attendance credit immediately. The minimum is fixed per course, rather than a configurable target or a semester-wide average.
 
 ## Operating Context
 
 - Native Android, implemented in Kotlin with Jetpack Compose and Material 3. Room stores local records, WorkManager supports optional reminders, and the separate `:domain` module owns calculation and scheduling rules. The app supports Android 8.0 / API 26 and newer.
 - Setup collects a semester name and start date, courses, and a Monday–Friday timetable. The college timezone defaults to the phone’s timezone and can be changed through search. When the chosen start is more than three days ago, students choose whether to enter attendance so far or mark past days individually. For attendance so far, each course starts with the college’s current date as its tracking date. Setup asks before continuing with an empty timetable, flags unscheduled courses in review, and offers an optional daily attendance reminder.
-- Today is the daily entry point. **Mark all present** records eligible unrecorded periods; **Mark remaining present** finishes a partially recorded day without replacing existing outcomes. Completed days show **Attendance complete**, with records available for review and edits.
+- Today opens on the current college date. Use the date arrows or date picker to move within the pager. **Catch up** opens the oldest earlier day with eligible unmarked periods. **Mark all present** and **Mark remaining present** record eligible unmarked periods and preserve existing outcomes. Completed days show an **All _n_ marked** summary and keep the period controls available. Expand a lab to edit individual periods.
 - The four labelled tabs are **Today**, **Courses**, **Calendar**, and **Settings**. Tap a selected tab to return to its root. Today returns to the current date. The semester label in the top bar opens a switcher when there is more than one semester.
-- **Courses** shows each course’s attendance and how many periods can be missed or must be attended. Tap a course for its credit breakdown, dates that are not marked, duty leave, and course actions. **Timetable** and **Duty leave** are labelled rows above the course list. Duty leave includes dated requests and pending leave from before tracking began. Stopped courses keep their records in the collapsed **No longer tracked** section.
-- **Calendar** shows the month and earlier days that are not marked. Tap a date to open it in the day pager. **Settings** contains semester management, display, reminders, backups, and About Ninety.
+- **Courses** shows each course’s attendance and how many periods can be missed or must be attended. Tap a course for its credit breakdown, unmarked dates, and course actions. Open **Timetable** from Courses and update historical leave totals in **Attendance before tracking**. Mark duty leave from period actions or select several periods in the dated day or lab actions. Stopped courses keep their records in **No longer tracked**, where tracking can resume.
+- **Calendar** shows a month grid with a status legend and the full list of earlier unmarked dates. Tap a date to open it in the day pager. **Settings** contains semester management, display, reminders, backups, **Recent changes**, and **About Ninety**. Eligible reminders show a remaining-period count and an **All present** action. Backup shows the last successful export on the device.
 - Under **Settings**, open a semester to view its records, edit its name, start date or timezone, or finish it. Finished semesters stay browsable and can be reopened when there is no current semester. Creating a replacement asks whether to finish the old one. Keeping it paused preserves the option to **Make current**.
 - Both timetable editors support choosing a course chip and tapping periods, copying the six periods of another weekday, and choosing a course from an individual period’s menu. Edits have effective dates. Saving changes that apply today first previews any marked periods that will be kept. Date-specific substitutions, copied weekday schedules, cancellations, holidays, and extra classes are distinct from the recurring template.
 - This is a local sideload app. Build/install instructions are in [README.md](README.md); publication and remote pushes require explicit authorization.
@@ -37,12 +37,12 @@ Ninety follows the institution's period-based attendance rules: a short Friday p
 ## Capabilities and Constraints
 
 - **One period, one unit.** Normal weekdays have six slots. Labs are separate courses and each constituent period is independently recordable. Clock duration never changes attendance weight; allowances are periods, never calendar days.
-- **Exact per-course decisions.** Use integer arithmetic for the inclusive 90% threshold and skip/recovery calculations. Rounded display percentages never determine eligibility. With no recorded attendance, show an explanatory empty state rather than a misleading percentage or allowance.
-- **Explicit attendance states.** Present, absent, pending/approved/rejected duty leave, unrecorded, and cancelled/not-conducted remain distinguishable. Only recorded, conducted, attendance-counting periods enter totals. Future, unrecorded, holiday, cancelled, and supplemental non-counting sessions are excluded. Flag incomplete past records without automatically marking them absent.
-- **Provisional credit stays visible.** Pending and approved duty leave count in primary attendance and skip calculations. Pending credit must be labeled provisional; a confirmed-only comparison is secondary. Rejection removes credit without removing the conducted period. Requests may span several periods, but no period may receive duplicate credit.
+- **Exact per-course decisions.** Use integer arithmetic for the inclusive 90% threshold and skip/recovery calculations. Display percentages truncate to one decimal place. Courses with no recorded attendance show an explanatory empty state.
+- **Explicit attendance states.** Present, absent, duty leave, unrecorded, and cancelled/not-conducted remain distinguishable. Only recorded, conducted, attendance-counting periods enter totals. Future, unrecorded, holiday, cancelled, and supplemental non-counting sessions are excluded. Flag incomplete past records without automatically marking them absent.
+- **Duty leave counts immediately.** Each eligible period can earn one attendance credit. Correct or clear the mark from the dated period actions.
 - **Fast logging preserves detail.** Group consecutive lab periods for quick actions while retaining per-period edits. Bulk present actions must preserve existing attendance, leave, holidays, and cancellations. Use undo for reversible mistakes and deliberate confirmation when replacing records or data.
 - **Schedules preserve history.** Copied weekday schedules count when conducted and recorded; manually added extras do not count unless explicitly enabled. Stable dated-session identities, local calendar dates, and conflict handling prevent duplicates and unintended historical rewrites.
-- **Opening balances are aggregates.** Track conducted, physically attended, approved-DL, and pending-DL counts before the first logging date. Counts must be nonnegative, credited totals cannot exceed conducted totals, and dated records must not double-count the opening history.
+- **Opening balances are aggregates.** Track conducted, physically attended, and duty leave counts before the first logging date. Counts must be nonnegative, credited totals cannot exceed conducted totals, and dated records must not double-count the opening history.
 - **Semester and course terminology.** One active semester at a time; no planned semester end date. Use full course names without a separate short name or course code. New or renamed course names must be unique within their semester.
 - **Offline and private.** No accounts, server, cloud sync, analytics, or Internet permission. Android automatic cloud backup and device transfer are disabled. Optional local reminders request notification permission only when enabled.
 - **User-owned backups.** Export/import portable, versioned JSON through Android's file picker. Restore validates the complete backup, previews replacement, asks for explicit confirmation, and replaces data atomically. Preserve identities, relationships, and records through backups, migrations, and upgrades; never use implicit destructive migrations.
@@ -57,7 +57,8 @@ The existing product name is **Ninety**, with the app icon at `app/src/main/res/
 - [PROJECT_SPEC.md](PROJECT_SPEC.md): approved product rules, worked calculation examples, privacy requirements, accessibility criteria, and non-goals.
 - [README.md](README.md): current workflows, build instructions, backup behavior, and release context.
 - [PROJECT_PROGRESS.md](PROJECT_PROGRESS.md): recorded host/device checks and known verification limits; historical results must not be presented as newly executed checks.
-- `docs/screenshots/today.png` and `docs/screenshots/courses.png`: examples using a synthetic test semester, not personal attendance or customer evidence. These are illustrative captures; verify freshness against current code before using them as visual authority.
+- [Screenshot notes](docs/screenshots/README.md) describe the historical five-tab images and the current 2.0× host captures. Both use synthetic data.
+- [Redesign verification](VERIFICATION_SUMMARY.md) records the host run, current paths, and device checks still open.
 - `domain/src/test/` and the app's JVM/instrumentation suites: calculation, persistence, backup, and workflow regression coverage. Their existence alone does not establish a passing run.
 
 Use synthetic attendance for screenshots and demonstrations. Do not invent customer claims, testimonials, benchmarks, pricing, or publication/licensing claims.
@@ -67,11 +68,11 @@ Use synthetic attendance for screenshots and demonstrations. Do not invent custo
 1. Calculation correctness and honest uncertainty come before decoration.
 2. Make the common daily action quick while keeping individual records easy to inspect and correct.
 3. Preserve history and user ownership through every bulk action, schedule edit, restore, and upgrade.
-4. Show actionable per-course information, with provisional and incomplete figures clearly qualified.
+4. Show actionable per-course information, with incomplete figures clearly qualified.
 5. Keep native Android behavior and offline operation central; add complexity only when it serves an approved student workflow.
 
 ## Accessibility & Inclusion
 
-Support scalable text, screen-reader labels, sensible focus order, keyboard-safe forms, scrolling, and at least 48 dp touch targets. Respect reduced-motion/system animation preferences. Both light and dark themes must provide accessible enabled text contrast (4.5:1, or 3:1 for large text) and essential control/focus contrast (3:1). Status must use text or icons as well as color; provisional duty leave and incomplete records remain distinct.
+Support scalable text, screen-reader labels, sensible focus order, keyboard-safe forms, scrolling, and at least 48 dp touch targets. Respect reduced-motion/system animation preferences. Both light and dark themes must provide accessible enabled text contrast (4.5:1, or 3:1 for large text) and essential control/focus contrast (3:1). Status must use text or icons as well as color; duty leave and incomplete records remain distinct.
 
 Use proportionate verification and report unverified behavior honestly. Physical hardware is not a development completion gate. Personal-device checks must preserve the installation and user data; never uninstall, clear storage, or reset the live attendance database for routine tests.

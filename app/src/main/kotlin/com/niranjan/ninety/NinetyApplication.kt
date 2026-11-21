@@ -1,6 +1,7 @@
 package com.niranjan.ninety
 
 import android.app.Application
+import com.niranjan.ninety.data.BackupExportSettings
 import com.niranjan.ninety.data.NinetyDatabase
 import com.niranjan.ninety.data.NinetyRepository
 import com.niranjan.ninety.data.RoomNinetyRepository
@@ -13,6 +14,7 @@ class AppContainer(context: android.content.Context,
     val clock: Clock = Clock.systemUTC(),
 ) {
     val repository: NinetyRepository = RoomNinetyRepository(database, clock)
+    val backupExportSettings by lazy { BackupExportSettings(context.applicationContext, clock) }
     val reminders: ReminderScheduler = ReminderScheduler(context, repository)
 }
 

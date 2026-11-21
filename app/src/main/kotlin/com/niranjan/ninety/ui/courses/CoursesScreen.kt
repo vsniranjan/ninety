@@ -1,9 +1,12 @@
 package com.niranjan.ninety.ui.courses
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,17 +18,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +38,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -60,11 +63,15 @@ import com.niranjan.ninety.domain.CourseType
 import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.ui.designsystem.ActionIcon
 import com.niranjan.ninety.ui.designsystem.ActionRow
+import com.niranjan.ninety.ui.designsystem.CapsText
 import com.niranjan.ninety.ui.designsystem.ChoiceRow
 import com.niranjan.ninety.ui.designsystem.ConfirmDialog
 import com.niranjan.ninety.ui.designsystem.EmptyState
-import com.niranjan.ninety.ui.designsystem.SectionLabel
+import com.niranjan.ninety.ui.designsystem.NinetyAlertDialog
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
+import com.niranjan.ninety.ui.designsystem.NinetyDimensions
+import com.niranjan.ninety.ui.designsystem.NinetyTextField
+import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.designsystem.caution
 import com.niranjan.ninety.ui.displayMessage
 import com.niranjan.ninety.ui.medium
@@ -79,18 +86,13 @@ import java.util.UUID
 
 @Composable
 fun CoursesScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate, snackbar: SnackbarHostState,
-    onEditTimetable: () -> Unit, onOpenLeave: () -> Unit, onOpenCourse: (String) -> Unit) {
+    onEditTimetable: () -> Unit, onOpenCourse: (String) -> Unit) {
     val model = ninetyViewModel<CoursesViewModel>(key = "courses-$semesterId-$today") {
         CoursesViewModel(it.repository, semesterId, today)
     }
     val stats by model.stats.collectAsStateWithLifecycle()
-    val templates by model.templates.collectAsStateWithLifecycle()
-    val leaveStats by model.leaveStats.collectAsStateWithLifecycle()
-    val pending = leaveStats?.let { it.pending + it.openingPending }
     val saving by model.saving.collectAsStateWithLifecycle()
     val added by model.courseAdded.collectAsStateWithLifecycle()
-    val timetable = templates.lastOrNull { it.effectiveFrom <= maxOf(today, semesterStart) }
-    val periodCount = timetable?.template?.assignments?.values?.sumOf { it.size } ?: 0
     var adding by rememberSaveable(semesterId) { mutableStateOf(false) }
     var showAttendanceRules by rememberSaveable { mutableStateOf(false) }
     var showStopped by rememberSaveable(semesterId) { mutableStateOf(false) }
@@ -113,42 +115,41 @@ fun CoursesScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate, 
     }
 
     val list = stats
+    val active = list.orEmpty().filterNot { it.course.retired }
     if (list == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     } else LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 24.dp).testTag("courses_list"),
+        Modifier.fillMaxSize().testTag("courses_list"),
+        contentPadding = PaddingValues(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                Text(stringResource(R.string.attendance_minimum), style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.attendance_minimum), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 ActionIcon(R.drawable.ic_info, stringResource(R.string.attendance_rules_title),
                     { showAttendanceRules = true }, modifier = Modifier.testTag("attendance_rules"))
-            }
-            StandingSummary(list)
-            if (list.any { it.summary.hasIncompleteData }) {
-                Text(stringResource(R.string.courses_unmarked_note), Modifier.padding(bottom = 8.dp),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.weight(1f))
+                if (active.isNotEmpty()) {
+                    val addBackground = MaterialTheme.colorScheme.secondaryContainer
+                    ActionIcon(R.drawable.ic_add, stringResource(R.string.add_course), { adding = true },
+                        modifier = Modifier.drawBehind { drawCircle(addBackground, radius = 18.dp.toPx()) }
+                            .testTag("add_course"), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
             }
         }
-        item {
-            ActionRow(R.drawable.ic_calendar, timetableLabel, onEditTimetable,
-                modifier = Modifier.testTag("open_timetable"), showChevron = true,
-                supportingText = stringResource(R.string.weekly_timetable_row, stringResource(R.string.weekdays_range),
-                    pluralStringResource(R.plurals.periods_per_week, periodCount, periodCount)))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            ActionRow(R.drawable.ic_leave, stringResource(R.string.duty_leave), onOpenLeave,
-                modifier = Modifier.testTag("open_duty_leave"), showChevron = true,
-                supportingText = pending?.let {
-                    pluralStringResource(R.plurals.duty_leave_periods_pending, it.pluralQuantity(), it)
-                })
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (active.isEmpty()) {
+            item {
+                EmptyState(stringResource(R.string.no_tracked_courses),
+                    actionLabel = stringResource(R.string.add_course), onAction = { adding = true })
+            }
         }
-        items(list.filterNot { it.course.retired }, key = { it.course.id }) { item ->
+        items(active, key = { it.course.id }) { item ->
             CourseRow(item) { onOpenCourse(item.course.id) }
         }
         item {
-            ActionRow(R.drawable.ic_add, stringResource(R.string.add_course), { adding = true },
-                modifier = Modifier.testTag("add_course"))
+            ActionRow(R.drawable.ic_calendar, timetableLabel, onEditTimetable,
+                modifier = Modifier.padding(top = 8.dp).testTag("open_timetable"))
         }
         val stopped = list.filter { it.course.retired }
         if (stopped.isNotEmpty()) {
@@ -174,7 +175,7 @@ fun CoursesScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate, 
         CourseDraftDialog(draft, names, semesterStart, today,
             onSave = { input ->
                 val balance = if (input.hasBalance) OpeningBalance(input.id, LocalDate.parse(input.loggingDate),
-                    input.conducted.toLong(), input.present.toLong(), input.approvedDl.toLong(), input.pendingDl.toLong())
+                    input.conducted.toLong(), input.present.toLong(), input.dutyLeave.toLong())
                     else null
                 model.addCourse(CourseSetup(input.id, CourseInput(input.name, input.type), balance))
             },
@@ -185,7 +186,7 @@ fun CoursesScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate, 
 
 @Composable
 fun CourseDetailScreen(semesterId: UUID, courseId: String, today: LocalDate, snackbar: SnackbarHostState,
-    onOpenDay: (LocalDate) -> Unit, onOpenLeave: () -> Unit) {
+    onOpenDay: (LocalDate) -> Unit) {
     val model = ninetyViewModel<CoursesViewModel>(key = "course-$semesterId-$today") {
         CoursesViewModel(it.repository, semesterId, today)
     }
@@ -195,7 +196,7 @@ fun CourseDetailScreen(semesterId: UUID, courseId: String, today: LocalDate, sna
     if (item == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (stats == null) CircularProgressIndicator()
-            else EmptyState(stringResource(R.string.course_unavailable), "")
+            else EmptyState(stringResource(R.string.course_unavailable))
         }
         return
     }
@@ -205,8 +206,8 @@ fun CourseDetailScreen(semesterId: UUID, courseId: String, today: LocalDate, sna
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 24.dp).testTag("course_detail")) {
         item {
             Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(item.course.name, style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                CapsText(item.course.name, style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.semantics { heading() })
                 Text(typeLabel(item.course.type), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.course.retired) Text(stringResource(R.string.no_longer_tracked),
@@ -217,19 +218,25 @@ fun CourseDetailScreen(semesterId: UUID, courseId: String, today: LocalDate, sna
                         color = MaterialTheme.colorScheme.error)
                 }
             }
-            SectionLabel(stringResource(R.string.attendance_breakdown))
-            AttendanceDetails(item)
+            if (summary.conducted > 0) {
+                SectionLabel(stringResource(R.string.attendance_breakdown))
+                AttendanceDetails(summary)
+            }
         }
         item {
-            ActionRow(R.drawable.ic_leave, stringResource(R.string.duty_leave_for_course), onOpenLeave,
-                modifier = Modifier.testTag("course_duty_leave"), showChevron = true)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            ActionRow(R.drawable.ic_edit, stringResource(R.string.rename), { dialog = CourseDialog.Edit },
+            ActionRow(R.drawable.ic_edit, stringResource(R.string.edit_course), { dialog = CourseDialog.Edit },
                 modifier = Modifier.testTag("course_rename"))
             ActionRow(R.drawable.ic_history, stringResource(R.string.attendance_before_tracking_action),
                 { dialog = CourseDialog.Balance }, modifier = Modifier.testTag("course_balance"))
-            if (!item.course.retired) ActionRow(R.drawable.ic_remove, stringResource(R.string.stop_tracking_course),
-                { dialog = CourseDialog.StopTracking }, modifier = Modifier.testTag("course_stop"))
+            if (item.course.retired) {
+                ActionRow(R.drawable.ic_add, stringResource(R.string.resume_tracking),
+                    { model.resumeCourse(UUID.fromString(courseId)) },
+                    supportingText = stringResource(R.string.resume_tracking_body),
+                    modifier = Modifier.testTag("course_resume"))
+            } else {
+                ActionRow(R.drawable.ic_remove, stringResource(R.string.stop_tracking_course),
+                    { dialog = CourseDialog.StopTracking }, modifier = Modifier.testTag("course_stop"))
+            }
         }
         val dates = summary.incompleteDates.sortedDescending()
         if (dates.isNotEmpty()) {
@@ -273,40 +280,46 @@ private fun CourseRow(item: CourseStats, onClick: () -> Unit) {
     val summary = item.summary
     val stack = LocalDensity.current.fontScale > 1.3f
     val openCourse = stringResource(R.string.open_course, item.course.name)
+    val percentColor = if (summary.standing() == CourseStanding.BELOW) MaterialTheme.colorScheme.error
+        else MaterialTheme.colorScheme.onSurface
+    val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("course_row_${item.course.id}")
-        .clickable(role = Role.Button, onClickLabel = openCourse, onClick = onClick).padding(vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(item.course.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(typeLabel(item.course.type), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+        .clip(NinetyDimensions.listCard).background(colors.surfaceVariant)
+        .clickable(role = Role.Button, onClickLabel = openCourse, onClick = onClick).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(item.course.name, Modifier.weight(1f).alignByBaseline(),
+                style = MaterialTheme.typography.titleMedium)
+            if (!stack && summary.conducted > 0) {
+                Text(percentOf(summary.credited, summary.conducted), Modifier.alignByBaseline(),
+                    style = MaterialTheme.typography.headlineSmall, color = percentColor)
             }
-            if (!stack && summary.conducted > 0) CoursePercentage(summary, summary.standing().color())
         }
-        AttendanceStanding(summary, showPercentage = stack)
-        if (summary.hasIncompleteData) {
-            Text(pluralStringResource(R.plurals.course_unmarked_periods, summary.missingPastPeriods.pluralQuantity(),
-                summary.missingPastPeriods), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error)
+        if (stack && summary.conducted > 0) CoursePercentage(summary, percentColor)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            Text(attendanceAllowance(summary, compact = true), style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant)
+            if (summary.hasIncompleteData) {
+                val missing = summary.missingPastPeriods
+                Text(stringResource(R.string.course_unmarked_compact, missing),
+                    style = MaterialTheme.typography.labelMedium, color = colors.onSecondaryContainer,
+                    modifier = Modifier.clip(CircleShape).background(colors.secondaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp))
+            }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable
-private fun AttendanceStanding(summary: AttendanceSummary, showPercentage: Boolean = true) {
+private fun AttendanceStanding(summary: AttendanceSummary) {
     val standing = summary.standing()
     val standingColor = standing.color()
-    if (showPercentage && summary.conducted > 0) CoursePercentage(summary, standingColor)
-    if (summary.isProvisional) {
-        Text(stringResource(R.string.attendance_if_leave_rejected, percentOf(summary.confirmedCredited, summary.conducted)),
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.caution.foreground)
-    }
+    if (summary.conducted > 0) CoursePercentage(summary, standingColor)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (standing != null) Icon(painterResource(standing.icon), contentDescription = null,
             modifier = Modifier.size(18.dp), tint = standingColor)
-        Text(attendanceNextStep(summary), style = MaterialTheme.typography.bodyMedium, color = standingColor)
+        Text(attendanceAllowance(summary), style = MaterialTheme.typography.bodyMedium, color = standingColor)
     }
 }
 
@@ -333,57 +346,35 @@ private fun CourseStanding?.color(): Color = when (this) {
 }
 
 @Composable
-private fun StandingSummary(courses: List<CourseStats>) {
-    val standings = courses.mapNotNull { it.summary.standing() }
-    val below = standings.count { it == CourseStanding.BELOW }
-    val atLimit = standings.count { it == CourseStanding.AT_LIMIT }
-    if (standings.isNotEmpty()) {
-        Text(stringResource(R.string.course_standing_summary, below, atLimit),
-            modifier = Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
 private fun CoursePercentage(summary: AttendanceSummary, color: Color) {
     Text(percentOf(summary.credited, summary.conducted),
         style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = color)
 }
 
 @Composable
-private fun attendanceNextStep(summary: AttendanceSummary): String {
+private fun attendanceAllowance(summary: AttendanceSummary, compact: Boolean = false): String {
     val recovery = summary.recovery ?: return stringResource(R.string.no_attendance_recorded)
     val skips = summary.safeSkips ?: 0L
-    val allowance = when {
-        recovery > 0 -> pluralStringResource(R.plurals.attend_next_periods, recovery.pluralQuantity(), recovery)
+    return when {
+        recovery > 0 -> pluralStringResource(
+            if (compact) R.plurals.course_recovery_compact else R.plurals.attend_next_periods,
+            recovery.pluralQuantity(), recovery)
         skips > 0 -> pluralStringResource(R.plurals.can_miss_periods, skips.pluralQuantity(), skips)
         else -> stringResource(R.string.no_absences_to_spare)
     }
-    return if (summary.isProvisional) {
-        pluralStringResource(R.plurals.provisional_allowance, summary.pendingDl.pluralQuantity(),
-            allowance, summary.pendingDl)
-    } else allowance
 }
 
 private fun Long.pluralQuantity() = coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 
 @Composable
-private fun AttendanceDetails(item: CourseStats) {
-    val summary = item.summary
+private fun AttendanceDetails(summary: AttendanceSummary) {
     Column(Modifier.padding(top = 10.dp, end = 4.dp, bottom = 6.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (summary.conducted > 0) {
             Text(stringResource(R.string.counted_as_attended, summary.credited, summary.conducted),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             DetailRow(stringResource(R.string.attended_in_person), summary.physicallyPresent.toString())
-            DetailRow(stringResource(R.string.duty_leave_count_approved), summary.approvedDl.toString())
-            DetailRow(stringResource(R.string.duty_leave_count_pending), summary.pendingDl.toString())
-            DetailRow(stringResource(R.string.duty_leave_count_rejected), summary.datedRejectedDl.toString())
-            if (summary.isProvisional) DetailRow(stringResource(R.string.without_pending_leave),
-                percentOf(summary.confirmedCredited, summary.conducted))
-        }
-        if (item.balance.pendingDl > 0) {
-            DetailRow(stringResource(R.string.pending_before_tracking), item.balance.pendingDl.toString())
+            DetailRow(stringResource(R.string.duty_leave), summary.dutyLeave.toString())
         }
     }
 }
@@ -402,11 +393,11 @@ private fun CourseFormDialog(existing: CourseStats, onDismiss: () -> Unit,
     onSave: (CourseInput) -> Unit) {
     var name by remember { mutableStateOf(existing.course.name) }
     var type by remember { mutableStateOf(runCatching { CourseType.valueOf(existing.course.type) }.getOrDefault(CourseType.THEORY)) }
-    AlertDialog(onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.rename_course, existing.course.name)) },
+    NinetyAlertDialog(onDismissRequest = onDismiss,
+        title = { CapsText(stringResource(R.string.edit_course)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it },
+                NinetyTextField(value = name, onValueChange = { name = it },
                     label = { Text(stringResource(R.string.course_name)) }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("course_name"))
                 ChoiceRow(CourseType.entries.map { it.name to typeLabel(it.name) }, type.name,
@@ -427,31 +418,28 @@ private fun BalanceDialog(item: CourseStats, onDismiss: () -> Unit, onSave: (Ope
     var logging by remember { mutableStateOf(b.loggingStartDate) }
     var conducted by remember { mutableStateOf(b.conducted.toString()) }
     var present by remember { mutableStateOf(b.present.toString()) }
-    var approved by remember { mutableStateOf(b.approvedDl.toString()) }
-    var pending by remember { mutableStateOf(b.pendingDl.toString()) }
+    var dutyLeave by remember { mutableStateOf(b.dutyLeave.toString()) }
     var pickDate by remember { mutableStateOf(false) }
     val c = conducted.toLongOrNull()
     val p = present.toLongOrNull()
-    val a = approved.toLongOrNull()
-    val pe = pending.toLongOrNull()
-    val error = openingCountError(c, p, a, pe)
-    AlertDialog(onDismissRequest = onDismiss, title = {
-        Text(stringResource(R.string.before_tracking_for_course, stringResource(R.string.before_tracking), item.course.name))
+    val dl = dutyLeave.toLongOrNull()
+    val error = openingCountError(c, p, dl)
+    NinetyAlertDialog(onDismissRequest = onDismiss, title = {
+        CapsText(stringResource(R.string.attendance_before_tracking_action))
     }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             TextButton(onClick = { pickDate = true }) {
                 Text(stringResource(R.string.tracking_starts_on, logging.medium()))
             }
             listOf(R.string.classes_held to conducted, R.string.attended_in_person to present,
-                R.string.duty_leave_count_approved to approved, R.string.duty_leave_count_pending to pending
+                R.string.duty_leave to dutyLeave
             ).forEachIndexed { index, (label, value) ->
-                OutlinedTextField(value = value, singleLine = true,
+                NinetyTextField(value = value, singleLine = true,
                     onValueChange = { v ->
                         when (index) {
                             0 -> conducted = v
                             1 -> present = v
-                            2 -> approved = v
-                            else -> pending = v
+                            else -> dutyLeave = v
                         }
                     },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -460,14 +448,14 @@ private fun BalanceDialog(item: CourseStats, onDismiss: () -> Unit, onSave: (Ope
             if (error != null) {
                 Text(stringResource(error), color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall)
-            } else if (c != null && p != null && a != null && pe != null) {
-                Text(stringResource(R.string.absence_count, c - p - a - pe), style = MaterialTheme.typography.bodySmall)
+            } else if (c != null && p != null && dl != null) {
+                Text(stringResource(R.string.absence_count, c - p - dl), style = MaterialTheme.typography.bodySmall)
             }
         }
     }, confirmButton = {
         TextButton(onClick = {
-            if (c != null && p != null && a != null && pe != null && error == null) {
-                onSave(OpeningBalance(UUID.fromString(item.course.id), logging, c, p, a, pe))
+            if (c != null && p != null && dl != null && error == null) {
+                onSave(OpeningBalance(UUID.fromString(item.course.id), logging, c, p, dl))
             }
         }, enabled = error == null) { Text(stringResource(R.string.save)) }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })

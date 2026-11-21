@@ -5,8 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.niranjan.ninety.AppContainer
 import com.niranjan.ninety.data.BackupPreview
 import com.niranjan.ninety.data.SemesterInfo
+import com.niranjan.ninety.data.UndoResult
 import com.niranjan.ninety.ui.guard
 import com.niranjan.ninety.ui.userMessage
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -27,6 +29,17 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     val busy = MutableStateFlow(false)
     /** Preview of a validated backup awaiting the user's restore confirmation. */
     val pendingRestore = MutableStateFlow<Pair<ByteArray, BackupPreview>?>(null)
+
+    val lastBackup = container.backupExportSettings.lastExport
+    fun isBackupOverdue(lastExport: Instant?) = container.backupExportSettings.isExportOverdue(lastExport)
+
+    val recentChanges = repository.observeRecentChanges()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun undoChange(batchId: UUID) = act {
+        val result = repository.undo(batchId)
+        if (result != UndoResult.DONE) messages.value = "That change can no longer be undone."
+    }
 
     fun setTheme(theme: String) = act { repository.updatePreferences(theme, haptics(), reminderOn(), reminderMinute()) }
     fun setHaptics(on: Boolean) = act { repository.updatePreferences(theme(), on, reminderOn(), reminderMinute()) }
@@ -78,14 +91,21 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun exportBackup(onWritten: () -> Unit, writeBytes: suspend (ByteArray) -> Unit) {
+        if (busy.value) return
+        busy.value = true
         viewModelScope.launch {
-            busy.value = true
-            runCatching {
-                val bytes = repository.exportBackup()
-                withContext(Dispatchers.IO) { writeBytes(bytes) }
-            }.onSuccess { onWritten() }
-                .onFailure { messages.value = it.userMessage() }
-            busy.value = false
+            try {
+                messages.guard {
+                    val bytes = repository.exportBackup()
+                    withContext(Dispatchers.IO) {
+                        writeBytes(bytes)
+                        container.backupExportSettings.recordSuccessfulExport()
+                    }
+                    onWritten()
+                }
+            } finally {
+                busy.value = false
+            }
         }
     }
 

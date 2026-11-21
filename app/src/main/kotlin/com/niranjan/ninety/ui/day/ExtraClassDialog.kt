@@ -13,9 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -48,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import com.niranjan.ninety.R
 import com.niranjan.ninety.data.CourseEntity
 import com.niranjan.ninety.domain.PeriodTimes
+import com.niranjan.ninety.ui.designsystem.CapsText
+import com.niranjan.ninety.ui.designsystem.NinetyAlertDialog
+import com.niranjan.ninety.ui.designsystem.NinetyDimensions
+import com.niranjan.ninety.ui.designsystem.NinetyMenu
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,9 +67,9 @@ internal fun ExtraClassDialog(
     var editingTime by rememberSaveable { mutableStateOf<ExtraTimeField?>(null) }
     var courseMenu by remember { mutableStateOf(false) }
     val invalidTimes = start >= end
-    AlertDialog(
+    NinetyAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.add_extra_class)) },
+        title = { CapsText(stringResource(R.string.add_extra_class)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box {
@@ -79,7 +81,7 @@ internal fun ExtraClassDialog(
                         enabled = course != null,
                         icon = R.drawable.ic_chevron_down,
                     )
-                    DropdownMenu(expanded = courseMenu, onDismissRequest = { courseMenu = false }) {
+                    NinetyMenu(expanded = courseMenu, onDismissRequest = { courseMenu = false }) {
                         courses.forEach { option ->
                             DropdownMenuItem(text = { Text(option.name) }, onClick = {
                                 courseId = option.id
@@ -103,11 +105,7 @@ internal fun ExtraClassDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked = counting, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
-                    Column {
-                        Text(stringResource(R.string.counts_toward_attendance), style = MaterialTheme.typography.bodyMedium)
-                        if (!counting) Text(stringResource(R.string.extra_class_excluded),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text(stringResource(R.string.counts_toward_attendance), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
@@ -148,10 +146,10 @@ private fun ExtraFormField(
     enabled: Boolean = true,
 ) {
     val colors = MaterialTheme.colorScheme
-    OutlinedCard(onClick = onClick, enabled = enabled,
+    OutlinedCard(onClick = onClick, enabled = enabled, shape = NinetyDimensions.pill,
         border = BorderStroke(1.dp, if (enabled) colors.outline else colors.outlineVariant),
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.labelMedium,
@@ -175,7 +173,9 @@ private fun ExtraTimePicker(field: ExtraTimeField, initial: Int, onDismiss: () -
     var keyboard by rememberSaveable { mutableStateOf(useInput) }
     TimePickerDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(field.label)) },
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = { CapsText(stringResource(field.label)) },
         confirmButton = {
             TextButton(onClick = { onPick(state.hour * 60 + state.minute) }, modifier = Modifier.testTag("extra_set_time")) {
                 Text(stringResource(R.string.extra_class_set_time))

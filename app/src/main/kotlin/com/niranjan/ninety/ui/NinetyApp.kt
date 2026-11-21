@@ -9,11 +9,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -29,12 +27,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,15 +39,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,11 +56,14 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -71,7 +72,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,16 +89,19 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.niranjan.ninety.R
-import com.niranjan.ninety.ui.courses.CoursesScreen
+import com.niranjan.ninety.ui.calendar.CalendarScreen
 import com.niranjan.ninety.ui.courses.CourseDetailScreen
+import com.niranjan.ninety.ui.courses.CoursesScreen
 import com.niranjan.ninety.ui.day.DayScreen
 import com.niranjan.ninety.ui.designsystem.ActionIcon
 import com.niranjan.ninety.ui.designsystem.ActionRow
+import com.niranjan.ninety.ui.designsystem.CapsText
 import com.niranjan.ninety.ui.designsystem.EmptyState
-import com.niranjan.ninety.ui.calendar.CalendarScreen
-import com.niranjan.ninety.ui.leave.LeaveScreen
-import com.niranjan.ninety.ui.settings.SettingsScreen
+import com.niranjan.ninety.ui.designsystem.NinetyAlertDialog
+import com.niranjan.ninety.ui.designsystem.NinetyDimensions
+import com.niranjan.ninety.ui.designsystem.NinetySnackbarHost
 import com.niranjan.ninety.ui.settings.SemesterScreen
+import com.niranjan.ninety.ui.settings.SettingsScreen
 import com.niranjan.ninety.ui.setup.SetupScreen
 import com.niranjan.ninety.ui.setup.SetupViewModel
 import com.niranjan.ninety.ui.timetable.TimetableExitHandler
@@ -106,13 +109,11 @@ import com.niranjan.ninety.ui.timetable.TimetableScreen
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
-import kotlin.math.roundToInt
 
 private const val ROUTE_TODAY = "today"
-private const val ROUTE_DAY = "day/{date}?origin={origin}&addDutyLeave={addDutyLeave}"
+private const val ROUTE_DAY = "day/{date}?origin={origin}"
 private const val ROUTE_COURSES = "courses"
 private const val ROUTE_CALENDAR = "calendar"
-private const val ROUTE_LEAVE = "courses/duty-leave?courseId={courseId}"
 private const val ROUTE_COURSE = "courses/detail/{courseId}"
 private const val ROUTE_SEMESTER = "settings/semester/{semesterId}"
 private const val ROUTE_SETTINGS = "settings"
@@ -121,8 +122,8 @@ private const val ROUTE_TIMETABLE = "timetable?origin={origin}"
 private const val SLIDE_MS = 160
 private fun <T> slideTiming() = tween<T>(durationMillis = SLIDE_MS, easing = FastOutSlowInEasing)
 
-private fun dayRoute(date: LocalDate, origin: String, addDutyLeave: Boolean = false) =
-    "day/$date?origin=$origin&addDutyLeave=$addDutyLeave"
+private fun dayRoute(date: LocalDate, origin: String) =
+    "day/$date?origin=$origin"
 
 private val NavBackStackEntry.isDatedDay: Boolean
     get() = destination.route == ROUTE_DAY
@@ -160,11 +161,7 @@ fun NinetyApp(appModel: AppViewModel) {
 private fun LoadingScaffold() {
     Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                CircularProgressIndicator(Modifier.size(24.dp).testTag("overview_loading"), strokeWidth = 2.dp)
-
-            }
+            CircularProgressIndicator(Modifier.size(24.dp).testTag("overview_loading"), strokeWidth = 2.dp)
         }
     }
 }
@@ -250,14 +247,11 @@ private fun MainScaffold(appModel: AppViewModel) {
         }
         val openSettings = { selectTab(TABS.last()) }
         fun openTimetable(origin: String) { nav.navigate("timetable?origin=$origin") }
-        fun openLeave(courseId: String? = null) {
-            nav.navigate(if (courseId == null) "courses/duty-leave" else "courses/duty-leave?courseId=$courseId")
-        }
         var showSemesterSwitcher by rememberSaveable { mutableStateOf(false) }
         if (showSemesterSwitcher) {
-            AlertDialog(
+            NinetyAlertDialog(
                 onDismissRequest = { showSemesterSwitcher = false },
-                title = { Text(stringResource(R.string.switch_semester)) },
+                title = { CapsText(stringResource(R.string.switch_semester)) },
                 text = {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         appState.semesters.forEach { semester ->
@@ -296,27 +290,32 @@ private fun MainScaffold(appModel: AppViewModel) {
             ROUTE_COURSES -> R.string.courses
             ROUTE_COURSE -> R.string.course_detail
             ROUTE_CALENDAR -> R.string.calendar
-            ROUTE_LEAVE -> R.string.duty_leave
             ROUTE_SETTINGS -> R.string.settings
             ROUTE_SEMESTER -> R.string.semester
             ROUTE_TIMETABLE -> R.string.timetable
             else -> if (backStack?.isDatedDay == true) R.string.day else R.string.today
         }
         Scaffold(
-            snackbarHost = { SnackbarHost(snackbar) },
+            snackbarHost = { NinetySnackbarHost(snackbar) },
             topBar = {
                 val barColor = if (browsingOtherSemester) MaterialTheme.colorScheme.surfaceVariant
                     else MaterialTheme.colorScheme.background
-                Column(Modifier.background(barColor)) {
+                val seam = MaterialTheme.colorScheme.outlineVariant
+                Column(Modifier.background(barColor).drawWithContent {
+                    drawContent()
+                    val stroke = NinetyDimensions.hairline.toPx()
+                    val y = size.height - stroke / 2
+                    drawLine(seam, Offset(0f, y), Offset(size.width, y), stroke)
+                }) {
                     TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor),
                         expandedHeight = if (semesterLabel == null) 56.dp else
-                            (if (canSwitch) 48.dp else 26.dp) +
-                                30.dp * LocalDensity.current.fontScale.coerceAtLeast(1f),
+                            (if (canSwitch) 48.dp else 24.dp) +
+                                26.dp * LocalDensity.current.fontScale.coerceAtLeast(1f),
                         title = {
                             Column {
-                                Text(stringResource(title), Modifier.semantics { heading() },
-                                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                CapsText(stringResource(title), Modifier.semantics { heading() },
+                                    style = MaterialTheme.typography.titleLarge)
                                 if (semesterLabel != null) {
                                     val modifier = if (canSwitch) Modifier
                                         .clickable(role = Role.Button, onClickLabel = stringResource(R.string.switch_semester)) {
@@ -339,7 +338,7 @@ private fun MainScaffold(appModel: AppViewModel) {
                         },
                         navigationIcon = {
                             if (backStack?.isDatedDay == true ||
-                                currentRoute in listOf(ROUTE_TIMETABLE, ROUTE_COURSE, ROUTE_LEAVE, ROUTE_SEMESTER)) {
+                                currentRoute in listOf(ROUTE_TIMETABLE, ROUTE_COURSE, ROUTE_SEMESTER)) {
                                 ActionIcon(R.drawable.ic_back, stringResource(R.string.back), {
                                     if (currentRoute == ROUTE_SEMESTER && backDispatcher != null) {
                                         backDispatcher.onBackPressed()
@@ -374,7 +373,11 @@ private fun MainScaffold(appModel: AppViewModel) {
                         NavigationRailItem(selected = selectedTab == index, onClick = { selectTab(tab) },
                             modifier = Modifier.testTag(tab.tag).semantics { contentDescription = label },
                             icon = { Icon(painterResource(tabIcon(tab.tag)), null, Modifier.size(22.dp)) },
-                            label = { Text(label) })
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                            colors = NavigationRailItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                indicatorColor = MaterialTheme.colorScheme.primary,
+                            ))
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
@@ -393,13 +396,12 @@ private fun MainScaffold(appModel: AppViewModel) {
                         composable(ROUTE_DAY, arguments = listOf(
                             navArgument("date") { type = NavType.StringType },
                             navArgument("origin") { type = NavType.StringType; nullable = true; defaultValue = null },
-                            navArgument("addDutyLeave") { type = NavType.BoolType; defaultValue = false },
                         )) { entry ->
                             val initialDate = LocalDate.parse(requireNotNull(entry.arguments?.getString("date")))
                             val origin = entry.arguments?.getString("origin") ?: ROUTE_TODAY
                             SemesterContent(semesterId, openSettings) { id ->
                                 DayScreen(id, initialDate, today, snackbar = snackbar, onEditTimetable = { openTimetable(origin) },
-                                    addDutyLeave = entry.arguments?.getBoolean("addDutyLeave") == true, archived = archived,
+                                    archived = archived,
                                     semesterStart = requireNotNull(semesterStart))
                             }
                         }
@@ -407,7 +409,6 @@ private fun MainScaffold(appModel: AppViewModel) {
                             SemesterContent(semesterId, openSettings) { id ->
                                 CoursesScreen(id, requireNotNull(semesterStart), today, snackbar,
                                     onEditTimetable = { openTimetable(ROUTE_COURSES) },
-                                    onOpenLeave = { openLeave() },
                                     onOpenCourse = { nav.navigate("courses/detail/$it") })
                             }
                         }
@@ -415,24 +416,13 @@ private fun MainScaffold(appModel: AppViewModel) {
                             val courseId = requireNotNull(entry.arguments?.getString("courseId"))
                             SemesterContent(semesterId, openSettings) { id ->
                                 CourseDetailScreen(id, courseId, today, snackbar,
-                                    onOpenDay = { nav.navigate(dayRoute(it, ROUTE_COURSES)) },
-                                    onOpenLeave = { openLeave(courseId) })
+                                    onOpenDay = { nav.navigate(dayRoute(it, ROUTE_COURSES)) })
                             }
                         }
                         composable(ROUTE_CALENDAR) {
                             SemesterContent(semesterId, openSettings) { id ->
                                 CalendarScreen(id, requireNotNull(semesterStart), today,
                                     onOpenDay = { nav.navigate(dayRoute(it, ROUTE_CALENDAR)) })
-                            }
-                        }
-                        composable(ROUTE_LEAVE, arguments = listOf(
-                            navArgument("courseId") { type = NavType.StringType; nullable = true; defaultValue = null },
-                        )) { entry ->
-                            SemesterContent(semesterId, openSettings) { id ->
-                                LeaveScreen(id, requireNotNull(semesterStart), snackbar, today,
-                                    courseId = entry.arguments?.getString("courseId")?.let(UUID::fromString),
-                                    onOpenDay = { nav.navigate(dayRoute(it, ROUTE_COURSES)) },
-                                    onAddDutyLeave = { nav.navigate(dayRoute(it, ROUTE_COURSES, addDutyLeave = true)) })
                             }
                         }
                         composable(ROUTE_SETTINGS) {
@@ -464,7 +454,7 @@ private fun NavBackStackEntry.tabIndex(): Int {
     val tabRoute = when (destination.route) {
         ROUTE_DAY -> arguments?.getString("origin") ?: ROUTE_TODAY
         ROUTE_TIMETABLE -> arguments?.getString("origin") ?: ROUTE_COURSES
-        ROUTE_COURSE, ROUTE_LEAVE -> ROUTE_COURSES
+        ROUTE_COURSE -> ROUTE_COURSES
         ROUTE_SEMESTER -> ROUTE_SETTINGS
         else -> destination.route
     }
@@ -483,14 +473,19 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideDirection(bac
 @Composable
 private fun SlidingTabBar(selectedIndex: Int, onSelect: (Tab) -> Unit) {
     val pillPosition = animateFloatAsState(selectedIndex.toFloat(), slideTiming(), label = "Selected tab")
-    val pillTop = 12.dp
-    NavigationBar(containerColor = MaterialTheme.colorScheme.background, tonalElevation = 0.dp) {
+    val pillTop = NinetyDimensions.medium
+    val colors = MaterialTheme.colorScheme
+    NavigationBar(modifier = Modifier.drawWithContent {
+        drawContent()
+        val stroke = NinetyDimensions.hairline.toPx()
+        drawLine(colors.outlineVariant, Offset(0f, stroke / 2), Offset(size.width, stroke / 2), stroke)
+    }, containerColor = colors.background, tonalElevation = 0.dp) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val labels = TABS.map { stringResource(it.label) }
             val labelStyle = MaterialTheme.typography.labelSmall
             val measurer = rememberTextMeasurer()
             val density = LocalDensity.current
-            val minimum = 48.dp
+            val minimum = NinetyDimensions.touchTarget
             val extraWidths = with(density) {
                 labels.map { label ->
                     val textWidth = measurer.measure(label, style = labelStyle, maxLines = 1).size.width.toDp()
@@ -514,7 +509,8 @@ private fun SlidingTabBar(selectedIndex: Int, onSelect: (Tab) -> Unit) {
                     IntOffset((center - pillWidth / 2).roundToPx(), pillTop.roundToPx())
                 }
                 .width(pillWidth).height(32.dp)
-                .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(10.dp)))
+                .background(colors.secondaryContainer, NinetyDimensions.pill)
+                .border(NinetyDimensions.hairline, colors.outline, NinetyDimensions.pill))
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).selectableGroup()) {
                 TABS.forEachIndexed { index, tab ->
                     val selected = index == selectedIndex
@@ -523,13 +519,17 @@ private fun SlidingTabBar(selectedIndex: Int, onSelect: (Tab) -> Unit) {
                     val focused by interactions.collectIsFocusedAsState()
                     Column(Modifier.weight(tabWidths[index].value).fillMaxHeight().heightIn(min = 72.dp)
                         .testTag(tab.tag).selectable(selected, interactionSource = interactions,
-                            indication = androidx.compose.material3.ripple(), role = Role.Tab, onClick = { onSelect(tab) })
+                            indication = null, role = Role.Tab, onClick = { onSelect(tab) })
                         .semantics { contentDescription = label }
                         .padding(top = pillTop, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.width(pillWidth).height(32.dp).then(
-                            if (focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            else Modifier),
-                            contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.width(pillWidth).height(32.dp)
+                                .clip(NinetyDimensions.pill)
+                                .indication(interactions, ripple(bounded = false))
+                                .then(if (focused) Modifier.border(2.dp, colors.onSurface, NinetyDimensions.pill)
+                                    else Modifier),
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Icon(painterResource(tabIcon(tab.tag)), contentDescription = null,
                                 modifier = Modifier.size(24.dp), tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
                                     else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -559,7 +559,7 @@ private fun SemesterContent(semesterId: UUID?, onOpenSettings: () -> Unit,
     content: @Composable (UUID) -> Unit) {
     if (semesterId == null) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            EmptyState(stringResource(R.string.no_current_semester), "",
+            EmptyState(stringResource(R.string.no_current_semester),
                 actionLabel = stringResource(R.string.open_settings), onAction = onOpenSettings)
         }
     } else content(semesterId)

@@ -39,8 +39,6 @@ data class OutcomeImage(
     val sessionId: String,
     val exists: Boolean,
     val kind: String? = null,
-    val dlStatus: String? = null,
-    val dlEventId: String? = null,
     val revision: Long = 0,
 )
 
@@ -50,8 +48,7 @@ data class BalanceImage(
     val loggingStartDay: Long,
     val conducted: Long,
     val present: Long,
-    val approvedDl: Long,
-    val pendingDl: Long,
+    val dutyLeave: Long,
     val revision: Long,
 )
 
@@ -61,6 +58,9 @@ data class VersionImage(val id: String, val semesterId: String, val effectiveDay
 
 @Serializable
 data class VersionSlotImage(val weekday: Int, val slot: Int, val courseId: String)
+
+@Serializable
+data class ResumedCourseImage(val id: String, val existingScheduleIds: Set<String>)
 
 /**
  * Everything needed to reverse one mutation: before-images of touched rows plus
@@ -79,11 +79,11 @@ data class UndoPayload(
     val createdDays: List<String> = emptyList(),
     val createdSessions: List<String> = emptyList(),
     val createdVersions: List<String> = emptyList(),
-    val createdEvents: List<String> = emptyList(),
     val deletedDays: List<DayImage> = emptyList(),
     val deletedSessions: List<SessionImage> = emptyList(),
     val expectedRevisions: Map<String, Long> = emptyMap(),
     val deletedVersions: List<VersionImage> = emptyList(),
+    val resumedCourse: ResumedCourseImage? = null,
 )
 
 val undoJson: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true }

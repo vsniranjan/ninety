@@ -1,0 +1,578 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-12T19:24:05.460700+00:00",
+  "title": "Design System: Ninety",
+  "extensions": {
+    "colorMeta": {
+      "light-primary": {
+        "role": "primary",
+        "displayName": "Light Primary",
+        "tonalRamp": [
+          "oklch(15.0% 0.20279 263.88)",
+          "oklch(26.4% 0.20279 263.88)",
+          "oklch(37.9% 0.20279 263.88)",
+          "oklch(49.3% 0.20279 263.88)",
+          "oklch(60.7% 0.20279 263.88)",
+          "oklch(72.1% 0.20279 263.88)",
+          "oklch(83.6% 0.20279 263.88)",
+          "oklch(95.0% 0.20279 263.88)"
+        ]
+      },
+      "dark-primary": {
+        "role": "primary",
+        "displayName": "Dark Primary",
+        "tonalRamp": [
+          "oklch(15.0% 0.12599 266.46)",
+          "oklch(26.4% 0.12599 266.46)",
+          "oklch(37.9% 0.12599 266.46)",
+          "oklch(49.3% 0.12599 266.46)",
+          "oklch(60.7% 0.12599 266.46)",
+          "oklch(72.1% 0.12599 266.46)",
+          "oklch(83.6% 0.12599 266.46)",
+          "oklch(95.0% 0.12599 266.46)"
+        ]
+      },
+      "light-primary-container": {
+        "role": "primary",
+        "displayName": "Light Primary Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.01993 267.29)",
+          "oklch(26.4% 0.01993 267.29)",
+          "oklch(37.9% 0.01993 267.29)",
+          "oklch(49.3% 0.01993 267.29)",
+          "oklch(60.7% 0.01993 267.29)",
+          "oklch(72.1% 0.01993 267.29)",
+          "oklch(83.6% 0.01993 267.29)",
+          "oklch(95.0% 0.01993 267.29)"
+        ]
+      },
+      "dark-primary-container": {
+        "role": "primary",
+        "displayName": "Dark Primary Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.05680 259.61)",
+          "oklch(26.4% 0.05680 259.61)",
+          "oklch(37.9% 0.05680 259.61)",
+          "oklch(49.3% 0.05680 259.61)",
+          "oklch(60.7% 0.05680 259.61)",
+          "oklch(72.1% 0.05680 259.61)",
+          "oklch(83.6% 0.05680 259.61)",
+          "oklch(95.0% 0.05680 259.61)"
+        ]
+      },
+      "light-on-primary-container": {
+        "role": "primary",
+        "displayName": "Light On Primary Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.14693 263.35)",
+          "oklch(26.4% 0.14693 263.35)",
+          "oklch(37.9% 0.14693 263.35)",
+          "oklch(49.3% 0.14693 263.35)",
+          "oklch(60.7% 0.14693 263.35)",
+          "oklch(72.1% 0.14693 263.35)",
+          "oklch(83.6% 0.14693 263.35)",
+          "oklch(95.0% 0.14693 263.35)"
+        ]
+      },
+      "dark-on-primary-container": {
+        "role": "primary",
+        "displayName": "Dark On Primary Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.03570 268.29)",
+          "oklch(26.4% 0.03570 268.29)",
+          "oklch(37.9% 0.03570 268.29)",
+          "oklch(49.3% 0.03570 268.29)",
+          "oklch(60.7% 0.03570 268.29)",
+          "oklch(72.1% 0.03570 268.29)",
+          "oklch(83.6% 0.03570 268.29)",
+          "oklch(95.0% 0.03570 268.29)"
+        ]
+      },
+      "dark-on-primary": {
+        "role": "primary",
+        "displayName": "Dark On Primary",
+        "tonalRamp": [
+          "oklch(15.0% 0.08849 262.82)",
+          "oklch(26.4% 0.08849 262.82)",
+          "oklch(37.9% 0.08849 262.82)",
+          "oklch(49.3% 0.08849 262.82)",
+          "oklch(60.7% 0.08849 262.82)",
+          "oklch(72.1% 0.08849 262.82)",
+          "oklch(83.6% 0.08849 262.82)",
+          "oklch(95.0% 0.08849 262.82)"
+        ]
+      },
+      "light-background": {
+        "role": "neutral",
+        "displayName": "Light Background",
+        "tonalRamp": [
+          "oklch(15.0% 0.00287 264.54)",
+          "oklch(26.4% 0.00287 264.54)",
+          "oklch(37.9% 0.00287 264.54)",
+          "oklch(49.3% 0.00287 264.54)",
+          "oklch(60.7% 0.00287 264.54)",
+          "oklch(72.1% 0.00287 264.54)",
+          "oklch(83.6% 0.00287 264.54)",
+          "oklch(95.0% 0.00287 264.54)"
+        ]
+      },
+      "dark-background": {
+        "role": "neutral",
+        "displayName": "Dark Background",
+        "tonalRamp": [
+          "oklch(15.0% 0.00442 264.46)",
+          "oklch(26.4% 0.00442 264.46)",
+          "oklch(37.9% 0.00442 264.46)",
+          "oklch(49.3% 0.00442 264.46)",
+          "oklch(60.7% 0.00442 264.46)",
+          "oklch(72.1% 0.00442 264.46)",
+          "oklch(83.6% 0.00442 264.46)",
+          "oklch(95.0% 0.00442 264.46)"
+        ]
+      },
+      "light-surface": {
+        "role": "neutral",
+        "displayName": "Light Surface",
+        "tonalRamp": [
+          "oklch(15.0% 0.00000 0.00)",
+          "oklch(26.4% 0.00000 0.00)",
+          "oklch(37.9% 0.00000 0.00)",
+          "oklch(49.3% 0.00000 0.00)",
+          "oklch(60.7% 0.00000 0.00)",
+          "oklch(72.1% 0.00000 0.00)",
+          "oklch(83.6% 0.00000 0.00)",
+          "oklch(95.0% 0.00000 0.00)"
+        ]
+      },
+      "dark-surface": {
+        "role": "neutral",
+        "displayName": "Dark Surface",
+        "tonalRamp": [
+          "oklch(15.0% 0.00837 264.39)",
+          "oklch(26.4% 0.00837 264.39)",
+          "oklch(37.9% 0.00837 264.39)",
+          "oklch(49.3% 0.00837 264.39)",
+          "oklch(60.7% 0.00837 264.39)",
+          "oklch(72.1% 0.00837 264.39)",
+          "oklch(83.6% 0.00837 264.39)",
+          "oklch(95.0% 0.00837 264.39)"
+        ]
+      },
+      "light-ink": {
+        "role": "neutral",
+        "displayName": "Light Ink",
+        "tonalRamp": [
+          "oklch(15.0% 0.00846 264.38)",
+          "oklch(26.4% 0.00846 264.38)",
+          "oklch(37.9% 0.00846 264.38)",
+          "oklch(49.3% 0.00846 264.38)",
+          "oklch(60.7% 0.00846 264.38)",
+          "oklch(72.1% 0.00846 264.38)",
+          "oklch(83.6% 0.00846 264.38)",
+          "oklch(95.0% 0.00846 264.38)"
+        ]
+      },
+      "dark-ink": {
+        "role": "neutral",
+        "displayName": "Dark Ink",
+        "tonalRamp": [
+          "oklch(15.0% 0.00287 264.54)",
+          "oklch(26.4% 0.00287 264.54)",
+          "oklch(37.9% 0.00287 264.54)",
+          "oklch(49.3% 0.00287 264.54)",
+          "oklch(60.7% 0.00287 264.54)",
+          "oklch(72.1% 0.00287 264.54)",
+          "oklch(83.6% 0.00287 264.54)",
+          "oklch(95.0% 0.00287 264.54)"
+        ]
+      },
+      "light-muted": {
+        "role": "neutral",
+        "displayName": "Light Muted",
+        "tonalRamp": [
+          "oklch(15.0% 0.02081 261.30)",
+          "oklch(26.4% 0.02081 261.30)",
+          "oklch(37.9% 0.02081 261.30)",
+          "oklch(49.3% 0.02081 261.30)",
+          "oklch(60.7% 0.02081 261.30)",
+          "oklch(72.1% 0.02081 261.30)",
+          "oklch(83.6% 0.02081 261.30)",
+          "oklch(95.0% 0.02081 261.30)"
+        ]
+      },
+      "dark-muted": {
+        "role": "neutral",
+        "displayName": "Dark Muted",
+        "tonalRamp": [
+          "oklch(15.0% 0.01898 261.33)",
+          "oklch(26.4% 0.01898 261.33)",
+          "oklch(37.9% 0.01898 261.33)",
+          "oklch(49.3% 0.01898 261.33)",
+          "oklch(60.7% 0.01898 261.33)",
+          "oklch(72.1% 0.01898 261.33)",
+          "oklch(83.6% 0.01898 261.33)",
+          "oklch(95.0% 0.01898 261.33)"
+        ]
+      },
+      "light-tonal": {
+        "role": "neutral",
+        "displayName": "Light Tonal",
+        "tonalRamp": [
+          "oklch(15.0% 0.00456 258.32)",
+          "oklch(26.4% 0.00456 258.32)",
+          "oklch(37.9% 0.00456 258.32)",
+          "oklch(49.3% 0.00456 258.32)",
+          "oklch(60.7% 0.00456 258.32)",
+          "oklch(72.1% 0.00456 258.32)",
+          "oklch(83.6% 0.00456 258.32)",
+          "oklch(95.0% 0.00456 258.32)"
+        ]
+      },
+      "dark-tonal": {
+        "role": "neutral",
+        "displayName": "Dark Tonal",
+        "tonalRamp": [
+          "oklch(15.0% 0.01190 264.36)",
+          "oklch(26.4% 0.01190 264.36)",
+          "oklch(37.9% 0.01190 264.36)",
+          "oklch(49.3% 0.01190 264.36)",
+          "oklch(60.7% 0.01190 264.36)",
+          "oklch(72.1% 0.01190 264.36)",
+          "oklch(83.6% 0.01190 264.36)",
+          "oklch(95.0% 0.01190 264.36)"
+        ]
+      },
+      "light-divider": {
+        "role": "neutral",
+        "displayName": "Light Divider",
+        "tonalRamp": [
+          "oklch(15.0% 0.00750 260.73)",
+          "oklch(26.4% 0.00750 260.73)",
+          "oklch(37.9% 0.00750 260.73)",
+          "oklch(49.3% 0.00750 260.73)",
+          "oklch(60.7% 0.00750 260.73)",
+          "oklch(72.1% 0.00750 260.73)",
+          "oklch(83.6% 0.00750 260.73)",
+          "oklch(95.0% 0.00750 260.73)"
+        ]
+      },
+      "dark-divider": {
+        "role": "neutral",
+        "displayName": "Dark Divider",
+        "tonalRamp": [
+          "oklch(15.0% 0.01361 261.72)",
+          "oklch(26.4% 0.01361 261.72)",
+          "oklch(37.9% 0.01361 261.72)",
+          "oklch(49.3% 0.01361 261.72)",
+          "oklch(60.7% 0.01361 261.72)",
+          "oklch(72.1% 0.01361 261.72)",
+          "oklch(83.6% 0.01361 261.72)",
+          "oklch(95.0% 0.01361 261.72)"
+        ]
+      },
+      "light-error": {
+        "role": "error",
+        "displayName": "Light Error",
+        "tonalRamp": [
+          "oklch(15.0% 0.17832 28.70)",
+          "oklch(26.4% 0.17832 28.70)",
+          "oklch(37.9% 0.17832 28.70)",
+          "oklch(49.3% 0.17832 28.70)",
+          "oklch(60.7% 0.17832 28.70)",
+          "oklch(72.1% 0.17832 28.70)",
+          "oklch(83.6% 0.17832 28.70)",
+          "oklch(95.0% 0.17832 28.70)"
+        ]
+      },
+      "dark-error": {
+        "role": "error",
+        "displayName": "Dark Error",
+        "tonalRamp": [
+          "oklch(15.0% 0.08908 26.76)",
+          "oklch(26.4% 0.08908 26.76)",
+          "oklch(37.9% 0.08908 26.76)",
+          "oklch(49.3% 0.08908 26.76)",
+          "oklch(60.7% 0.08908 26.76)",
+          "oklch(72.1% 0.08908 26.76)",
+          "oklch(83.6% 0.08908 26.76)",
+          "oklch(95.0% 0.08908 26.76)"
+        ]
+      },
+      "light-error-container": {
+        "role": "error",
+        "displayName": "Light Error Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.01682 31.08)",
+          "oklch(26.4% 0.01682 31.08)",
+          "oklch(37.9% 0.01682 31.08)",
+          "oklch(49.3% 0.01682 31.08)",
+          "oklch(60.7% 0.01682 31.08)",
+          "oklch(72.1% 0.01682 31.08)",
+          "oklch(83.6% 0.01682 31.08)",
+          "oklch(95.0% 0.01682 31.08)"
+        ]
+      },
+      "dark-error-container": {
+        "role": "error",
+        "displayName": "Dark Error Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.05415 24.30)",
+          "oklch(26.4% 0.05415 24.30)",
+          "oklch(37.9% 0.05415 24.30)",
+          "oklch(49.3% 0.05415 24.30)",
+          "oklch(60.7% 0.05415 24.30)",
+          "oklch(72.1% 0.05415 24.30)",
+          "oklch(83.6% 0.05415 24.30)",
+          "oklch(95.0% 0.05415 24.30)"
+        ]
+      },
+      "light-on-error-container": {
+        "role": "error",
+        "displayName": "Light On Error Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.14731 28.14)",
+          "oklch(26.4% 0.14731 28.14)",
+          "oklch(37.9% 0.14731 28.14)",
+          "oklch(49.3% 0.14731 28.14)",
+          "oklch(60.7% 0.14731 28.14)",
+          "oklch(72.1% 0.14731 28.14)",
+          "oklch(83.6% 0.14731 28.14)",
+          "oklch(95.0% 0.14731 28.14)"
+        ]
+      },
+      "dark-on-error-container": {
+        "role": "error",
+        "displayName": "Dark On Error Container",
+        "tonalRamp": [
+          "oklch(15.0% 0.04177 25.23)",
+          "oklch(26.4% 0.04177 25.23)",
+          "oklch(37.9% 0.04177 25.23)",
+          "oklch(49.3% 0.04177 25.23)",
+          "oklch(60.7% 0.04177 25.23)",
+          "oklch(72.1% 0.04177 25.23)",
+          "oklch(83.6% 0.04177 25.23)",
+          "oklch(95.0% 0.04177 25.23)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display-large": {
+        "displayName": "Display Large",
+        "purpose": "Declared native theme role; not the default phone page-heading treatment."
+      },
+      "display-medium": {
+        "displayName": "Display Medium",
+        "purpose": "Declared native theme role; not the default phone page-heading treatment."
+      },
+      "display-small": {
+        "displayName": "Display Small",
+        "purpose": "Declared native theme role; not the default phone page-heading treatment."
+      },
+      "headline-large": {
+        "displayName": "Headline Large",
+        "purpose": "Declared native theme role; not the default phone page-heading treatment."
+      },
+      "headline-medium": {
+        "displayName": "Headline Medium",
+        "purpose": "Screen headings and weekday name."
+      },
+      "headline-small": {
+        "displayName": "Headline Small",
+        "purpose": "Course percentage; source overrides this use to Bold."
+      },
+      "title-large": {
+        "displayName": "Title Large",
+        "purpose": "Masthead and completion heading; masthead uses Bold."
+      },
+      "title-medium": {
+        "displayName": "Title Medium",
+        "purpose": "Full course names and major group content."
+      },
+      "title-small": {
+        "displayName": "Title Small",
+        "purpose": "Muted section labels."
+      },
+      "body-large": {
+        "displayName": "Body Large",
+        "purpose": "Fields and readable selectable values."
+      },
+      "body-medium": {
+        "displayName": "Body Medium",
+        "purpose": "Dialog content and general content."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Date/time rail, course type, concise supporting content."
+      },
+      "label-large": {
+        "displayName": "Label Large",
+        "purpose": "Action and choice labels."
+      },
+      "label-medium": {
+        "displayName": "Label Medium",
+        "purpose": "Compact counts and state labels."
+      },
+      "label-small": {
+        "displayName": "Label Small",
+        "purpose": "Weekday headers, small DL label, compact metadata."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "navigation-slide",
+        "value": "tween(160ms, FastOutSlowInEasing)",
+        "purpose": "NinetyApp.kt route slides and selected-tab position; native Compose tween, not CSS."
+      },
+      {
+        "name": "status-color",
+        "value": "tween(180ms)",
+        "purpose": "Components.kt OutcomeChip and PeriodProgress colors; default Compose tween easing."
+      },
+      {
+        "name": "inline-expansion",
+        "value": "animateContentSize()",
+        "purpose": "CoursesScreen.kt and LeaveScreen.kt; Compose default animation specification, no app-authored fixed duration."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "navigation-rail",
+        "value": "600dp"
+      },
+      {
+        "name": "compact-labels-and-percentage-stack",
+        "value": "fontScale > 1.3"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "primary-action-light",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. PrimaryAction in Components.kt: minimum 52dp, medium shape, native Material enabled/disabled feedback.",
+      "html": "<button class=\"ds-primary\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5,12l4.5,4.5L19,7\"/></svg><span>Mark all present</span></button>",
+      "css": ".ds-primary{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:14px 20px;border:0;border-radius:12px;background:#2457D6;color:#FFFFFF;font-size:14px;font-weight:600;line-height:20px;cursor:pointer}.ds-primary:hover{filter:brightness(.96)}.ds-primary:focus-visible{outline:2px solid #2457D6;outline-offset:3px}.ds-primary:active{filter:brightness(.90)}.ds-primary:disabled{opacity:.38;cursor:default}@media(prefers-color-scheme:dark){.ds-primary{background:#8AACFF;color:#102654}.ds-primary:focus-visible{outline-color:#8AACFF}}"
+    },
+    {
+      "name": "Text action",
+      "kind": "button",
+      "refersTo": "text-button-light",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. Material TextButton used for Save/Cancel and secondary actions; native metrics are framework-owned.",
+      "html": "<button class=\"ds-text\">Save</button>",
+      "css": ".ds-text{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";padding:10px 12px;border:0;border-radius:12px;background:transparent;color:#2457D6;font-size:14px;font-weight:600;line-height:20px;cursor:pointer}.ds-text:hover{background:#E8EEFC}.ds-text:focus-visible{outline:2px solid currentColor;outline-offset:2px}.ds-text:active{background:#E8EEFC}.ds-text:disabled{opacity:.38}@media(prefers-color-scheme:dark){.ds-text{color:#8AACFF}.ds-text:hover,.ds-text:active{background:#243653}}"
+    },
+    {
+      "name": "Icon action",
+      "kind": "button",
+      "refersTo": "icon-action",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. ActionIcon in Components.kt: named 48dp target, 22dp authored vector, native tooltip; source disabled tint alpha is 0.38.",
+      "html": "<button class=\"ds-icon\" aria-label=\"Day actions\" title=\"Day actions\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12,5h0.01 M12,12h0.01 M12,19h0.01\"/></svg></button>",
+      "css": ".ds-icon{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;padding:0;border:0;border-radius:50%;background:transparent;color:#626975;cursor:pointer}.ds-icon:hover{background:#EFF1F4}.ds-icon:focus-visible{outline:2px solid #2457D6;outline-offset:2px}.ds-icon:active{background:#E3E6EB}.ds-icon:disabled{opacity:.38}@media(prefers-color-scheme:dark){.ds-icon{color:#A5ACB8}.ds-icon:hover,.ds-icon:active{background:#25282E}.ds-icon:focus-visible{outline-color:#8AACFF}}"
+    },
+    {
+      "name": "Outlined field",
+      "kind": "input",
+      "refersTo": "outlined-field",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. Material OutlinedTextField in CoursesScreen.kt and SetupScreen.kt; native focus/error/shape metrics are inherited, CSS outline is an illustration.",
+      "html": "<label class=\"ds-field\"><span>Course name</span><input aria-label=\"Course name\" value=\"Operating Systems\"/></label>",
+      "css": ".ds-field{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";display:flex;position:relative;max-width:320px;padding-top:7px;color:#626975;font-size:12px;line-height:18px}.ds-field span{position:absolute;top:0;left:12px;padding:0 4px;background:#FFFFFF}.ds-field input{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";min-width:0;width:100%;padding:16px;border:1px solid #626975;border-radius:8px;background:#FFFFFF;color:#17191D;font-size:16px;line-height:24px}.ds-field input:hover{border-color:#17191D}.ds-field input:focus-visible{outline:2px solid #2457D6;outline-offset:-2px}.ds-field:focus-within span{color:#2457D6}.ds-field input:disabled{opacity:.38}@media(prefers-color-scheme:dark){.ds-field{color:#A5ACB8}.ds-field span,.ds-field input{background:#191B1F}.ds-field input{color:#F3F4F6;border-color:#A5ACB8}.ds-field input:focus-visible{outline-color:#8AACFF}.ds-field:focus-within span{color:#8AACFF}}"
+    },
+    {
+      "name": "Choice chip",
+      "kind": "chip",
+      "refersTo": "filter-choice",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. ChoiceRow/WeeklySchedule use Material FilterChip at minimum 48dp; selected state shown. Native defaults own unselected boundary and shape.",
+      "html": "<button class=\"ds-choice\" aria-pressed=\"true\">Monday</button>",
+      "css": ".ds-choice{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";min-height:48px;padding:10px 16px;border:0;border-radius:8px;background:#E8EEFC;color:#173C91;font-size:14px;font-weight:600;line-height:20px;cursor:pointer}.ds-choice:hover{filter:brightness(.97)}.ds-choice:focus-visible{outline:2px solid #2457D6;outline-offset:2px}.ds-choice:active{filter:brightness(.92)}@media(prefers-color-scheme:dark){.ds-choice{background:#243653;color:#DCE6FF}.ds-choice:focus-visible{outline-color:#8AACFF}}"
+    },
+    {
+      "name": "Grouped surface",
+      "kind": "card",
+      "refersTo": "surface-card-light",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. NinetyCard in Components.kt; shown with a common caller-owned 16dp inset. Static grouping has no hover behavior.",
+      "html": "<section class=\"ds-group\"><strong>Appearance</strong><span>Haptic feedback</span></section>",
+      "css": ".ds-group{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";display:flex;flex-direction:column;gap:12px;max-width:320px;padding:16px;border:0;border-radius:16px;background:#FFFFFF;color:#17191D;font-size:14px;line-height:22px}.ds-group strong{font-size:16px;line-height:24px;font-weight:600}.ds-group span{color:#626975}@media(prefers-color-scheme:dark){.ds-group{background:#191B1F;color:#F3F4F6}.ds-group span{color:#A5ACB8}}"
+    },
+    {
+      "name": "Compact navigation",
+      "kind": "nav",
+      "refersTo": "selected-tab-light",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. SlidingTabBar in NinetyApp.kt; five named tabs, selected visible label, 32dp indicator up to 56dp wide, authored native focus border. Preview selection is static.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main\"><div role=\"tablist\"><button class=\"ds-tab ds-selected\" role=\"tab\" aria-selected=\"true\" aria-label=\"Today\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M8,3v4 M16,3v4 M4,9h16 M6,5h12a2,2 0,0 1,2 2v12a2,2 0,0 1,-2 2H6a2,2 0,0 1,-2 -2V7a2,2 0,0 1,2 -2 M8,14l2.5,2.5L16,11\"/></svg></span><span class=\"ds-tab-label\">Today</span></button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" aria-label=\"Courses\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4,5.5c3,-1.2 5,-0.8 8,1c3,-1.8 5,-2.2 8,-1v14c-3,-1.2 -5,-0.8 -8,1c-3,-1.8 -5,-2.2 -8,-1z M12,6.5v14\"/></svg></span></button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" aria-label=\"History\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3,11a9,9 0,1 1,2.5 7 M3,4v7h7 M12,7v5l3,2\"/></svg></span></button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" aria-label=\"Duty Leave\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M8,3h8v4H8z M8,5H6a2,2 0,0 0,-2 2v13h16V7a2,2 0,0 0,-2 -2h-2 M8,13l2.5,2.5L16,10\"/></svg></span></button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" aria-label=\"Settings\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4,6h7 M15,6h5 M4,12h2 M10,12h10 M4,18h10 M18,18h2 M11,3v6 M6,9v6 M14,15v6\"/></svg></span></button></div></nav>",
+      "css": ".ds-nav{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";width:100%;max-width:440px;background:#F7F8FA}.ds-nav>div{display:flex;height:72px}.ds-tab{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;gap:4px;padding:12px 0 0;border:0;background:transparent;color:#626975;cursor:pointer}.ds-tab-icon{display:flex;align-items:center;justify-content:center;width:56px;max-width:100%;height:32px;border-radius:10px}.ds-selected .ds-tab-icon{background:#E8EEFC;color:#173C91}.ds-tab-label{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";color:#17191D;font-size:12px;font-weight:500;line-height:18px}.ds-tab:hover .ds-tab-icon{background:#EFF1F4}.ds-tab:focus-visible{outline:0}.ds-tab:focus-visible .ds-tab-icon{outline:1px solid #2457D6}.ds-tab:active .ds-tab-icon{background:#E3E6EB}@media(prefers-color-scheme:dark){.ds-nav{background:#101113}.ds-tab{color:#A5ACB8}.ds-tab-label{color:#F3F4F6}.ds-selected .ds-tab-icon{background:#243653;color:#DCE6FF}.ds-tab:hover .ds-tab-icon,.ds-tab:active .ds-tab-icon{background:#25282E}.ds-tab:focus-visible .ds-tab-icon{outline-color:#8AACFF}}"
+    },
+    {
+      "name": "Present outcome",
+      "kind": "chip",
+      "refersTo": "outcome-present-light",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. OutcomeChip in Components.kt; noninteractive state badge with full semantic name, 8dp corners, 6dp padding, 18dp vector.",
+      "html": "<span class=\"ds-outcome\" role=\"img\" aria-label=\"Present\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5,12l4.5,4.5L19,7\"/></svg></span>",
+      "css": ".ds-outcome{display:inline-flex;align-items:center;padding:6px;border-radius:8px;background:#E8EEFC;color:#173C91}@media(prefers-color-scheme:dark){.ds-outcome{background:#243653;color:#DCE6FF}}"
+    },
+    {
+      "name": "Period progress",
+      "kind": "custom",
+      "refersTo": "period-progress",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. PeriodProgress in Components.kt; six eligible periods, three recorded in this synthetic example. Source supports exact semantics and caps visual marker count at 24.",
+      "html": "<div class=\"ds-progress\" role=\"progressbar\" aria-label=\"Periods recorded\" aria-valuemin=\"0\" aria-valuemax=\"6\" aria-valuenow=\"3\"><span class=\"ds-done\"></span><span class=\"ds-done\"></span><span class=\"ds-done\"></span><span class=\"ds-remaining\"></span><span class=\"ds-remaining\"></span><span class=\"ds-remaining\"></span></div>",
+      "css": ".ds-progress{display:flex;gap:5px;width:100%;min-width:180px;max-width:440px}.ds-progress span{flex:1;height:4px;border-radius:2px}.ds-done{background:#2457D6}.ds-remaining{background:#E3E6EB}@media(prefers-color-scheme:dark){.ds-done{background:#8AACFF}.ds-remaining{background:#30343B}}"
+    },
+    {
+      "name": "Running-order row",
+      "kind": "custom",
+      "refersTo": "schedule-time-rail",
+      "description": "Documentation translation only: CSS px illustrate native dp/sp; browser Manrope availability and web states are not Android rendering guarantees. WeeklySchedule in WeeklySchedule.kt: 52dp rail, 12dp gap, 72dp minimum, 12dp vertical inset. Editable rows open a native menu; the preview is a static read-only row.",
+      "html": "<div class=\"ds-row\"><div class=\"ds-rail\"><span>P1</span><span>09:00</span></div><strong>Operating Systems</strong></div>",
+      "css": ".ds-row{font-family:Manrope,sans-serif;font-feature-settings:\"tnum\";display:flex;align-items:center;gap:12px;min-height:72px;padding:12px 0;max-width:440px;border-bottom:1px solid #E3E6EB;color:#17191D}.ds-rail{display:flex;flex:none;flex-direction:column;gap:3px;width:52px;color:#626975;font-size:12px;line-height:18px}.ds-rail span:first-child{font-weight:500}.ds-row strong{font-size:16px;font-weight:600;line-height:24px}@media(prefers-color-scheme:dark){.ds-row{color:#F3F4F6;border-color:#30343B}.ds-rail{color:#A5ACB8}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Quiet rhythm",
+    "overview": "A quiet running order makes daily attendance easy to scan and record. Full course names, a narrow period/time rail, open rows, and a small set of outline icons carry the interface. Blue identifies action and selection against neutral light or charcoal dark surfaces.\n\nThe owner-pinned character is minimal, clean, uncluttered, and icon-led. Supporting text appears when it changes a decision: provisional credit, missing records, recovery requirements, and destructive confirmations remain explicit. There is no decorative imagery, wallpaper-derived color, or purple/lavender surface language.",
+    "keyCharacteristics": [
+      "Open time-led rows rather than repeated dashboard cards.",
+      "Bundled Manrope with tabular numerals and compact hierarchy.",
+      "Restrained blue, neutral groups, and semantic error color in both themes.",
+      "Named icon actions; short text for primary and consequential actions."
+    ],
+    "rules": [
+      {
+        "name": "The Pinned Palette Rule",
+        "body": "Use the explicit light or dark scheme. System mode chooses the scheme; wallpaper colors never replace it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Useful Color Rule",
+        "body": "Blue marks action, selection, focus, or recorded progress. Error colors mark absence, rejection, validation, missing records, or a course below its minimum. Pending credit stays neutral and named.",
+        "section": "colors"
+      },
+      {
+        "name": "The Clear State Rule",
+        "body": "Keep full course names and concise uncertainty labels. Icons reduce repeated copy; they do not erase provisional or consequential meaning.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tonal Group Rule",
+        "body": "Use open rows for running lists and neutral surface groups where settings, calendar content, or review data need a boundary. Do not turn every row into a bordered card.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use the pinned light and dark schemes and the shared Manrope hierarchy.",
+      "Do keep full course names, period-based counts, and short provisional or incomplete-state labels.",
+      "Do use the authored outline vectors and supply an accessible name for each icon action.",
+      "Do retain concise text on the primary action and on save, cancel, restore, and destructive decisions.",
+      "Do reuse open rows, the time rail, tonal grouping, and native Material interaction behavior.",
+      "Do validate new layouts on the target device; source adaptations are not proof of tablet, enlarged-text, or TalkBack behavior."
+    ],
+    "donts": [
+      "Don't introduce wallpaper dynamic color, purple/lavender surfaces, or additional decorative accents.",
+      "Don't add explanatory paragraphs, decorative imagery, ornamental progress, or repeated bordered dashboard cards.",
+      "Don't replace authored vectors with text glyphs, emoji, or icon fonts.",
+      "Don't make pending credit look confirmed or hide missing-record and below-minimum states to simplify a screen.",
+      "Don't treat documentation HTML previews as app code or pixel-accurate native renders."
+    ]
+  }
+}

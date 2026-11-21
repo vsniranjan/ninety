@@ -1,6 +1,68 @@
 # Project progress
 
-Updated: 2026-11-12 (Asia/Kolkata).
+Updated: 2026-11-13 (Asia/Kolkata).
+
+## Whole-app minimal redesign — 2026-11-13
+
+Rebuilt the interface around the owner's explicit minimal, clean, icon-led brief.
+Today uses open period/time rows, quick present/absent actions and a six-period
+recording track. Courses is a compact list with expandable details. History,
+Duty Leave, Settings, all four setup steps, timetable, course editors, and period
+sheets share bundled Manrope typography and authored outline icons. Removed
+onboarding explanations and repeated labels; secondary leave totals sit behind
+an info action. Kept provisional/incomplete indicators, consequential confirmations,
+full course names, offline behavior and the approved neutral/blue themes. System
+bar icons now follow the selected app theme.
+
+Final checks: **3 focused Compose interaction tests + 2 contrast tests passed**;
+debug and release lint report no issues; debug, signed minified release and
+instrumentation APKs built. The domain task was up-to-date, not freshly rerun.
+The isolated native review **passed (1 test)** on the Redmi Note 10S, Android 13,
+with 28 phone captures covering the main screens in light/dark, setup and editors.
+The runner overrides Application with an in-memory Room container. Personal
+`ninety.db`, WAL and SHM hashes matched immediately before and after the final run.
+No app data was reset or uninstalled. Test-harness fixture and timing failures
+were corrected before collecting the final evidence; MIUI's blocked launch was
+handled with the matching activity intent, without changing security settings.
+
+Installed the signed release in place; UID, first installation times and app data
+directory matched the pre-review values. The APK declares no Internet permission.
+Release artifact: `app/build/outputs/apk/release/app-release.apk`.
+
+Independent Impeccable finish review: **ship**, no material fixes in the supplied
+normal-text phone evidence. Tablet layout, enlarged text, full TalkBack traversal,
+gesture behavior and measured animation performance were not certified by that
+review. Native design detection was skipped because it analyzes HTML/CSS only.
+Refreshed README screenshots use synthetic attendance and embed capture origins.
+
+Evidence: `.toolchain/redesign-final-tests.log`,
+`.toolchain/redesign-confirm-build.log`, `.toolchain/redesign-device/`, and
+`.impeccable/review/finish-review.md`. Latest native captures:
+`.impeccable/review/native-1794510837826142103/`.
+The optional capture runner is built with `-Pninety.visualReview=true` and invoked
+as `com.niranjan.ninety.test/com.niranjan.ninety.RedesignTestRunner`, selecting
+`com.niranjan.ninety.RedesignDeviceTest`; the normal runner skips that isolated
+review class. Existing device-test retention settings remain enabled.
+
+## Ninety 1.0.3 — daily attendance flow
+
+Today offers **Mark all present** before any attendance is logged and **Mark
+remaining present** after a partial entry. Both preserve existing records.
+Completed days show **Attendance complete** and collapse the period list under
+**Review attendance**. Lab groups keep their period details collapsed during
+logging, and duty leave is a secondary action. The tab is labeled **Duty Leave**.
+
+The normal-size Compose workflow and 39 Room tests passed. The Compose check
+marked the remaining periods present, verified an existing absence was kept,
+and reopened a completed day to edit it. Release lint found no issues and the
+signed APK built without Internet permission. The updated instrumented journey
+compiled; it was not run for this release.
+
+Installed the signed APK in place on the Xiaomi M2101K7BI (Android 13) with
+installation identity and app data directory retained. On the existing synthetic
+semester, verified the completed day, the review and hide actions, and the
+Duty Leave tab at normal text size without editing records. Restored stay-awake
+to 0. Local APK: `.toolchain/ninety-1.0.3/Ninety-1.0.3.apk`.
 
 ## Ninety 1.0.2 — course names and faster navigation
 

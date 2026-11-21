@@ -37,8 +37,6 @@ data class CourseStats(
     val summary: AttendanceSummary,
 )
 
-enum class DlStatus { PENDING, APPROVED, REJECTED }
-
 data class SessionView(
     val id: UUID,
     val date: LocalDate,
@@ -55,8 +53,6 @@ data class SessionView(
     val pinned: Boolean,
     val suppressed: Boolean,
     val outcome: AttendanceOutcome,
-    val dlStatus: DlStatus?,
-    val dlEventId: UUID?,
     val revision: Long,
 ) {
     val recorded: Boolean get() = outcome != AttendanceOutcome.UNRECORDED
@@ -91,9 +87,9 @@ data class DayView(
     val groups: List<SlotGroup>,
     val extras: List<SessionView>,
 ) {
-    val total: Int get() = groups.sumOf { g -> g.cells.count { it.session?.counting == true && it.session.loggable } } +
+    val total: Int get() = if (holiday) 0 else groups.sumOf { g -> g.cells.count { it.session?.counting == true && it.session.loggable } } +
         extras.count { it.counting && it.loggable }
-    val recorded: Int get() = groups.sumOf { g -> g.cells.count { it.session?.recorded == true && it.session.loggable && it.session.counting } } +
+    val recorded: Int get() = if (holiday) 0 else groups.sumOf { g -> g.cells.count { it.session?.recorded == true && it.session.loggable && it.session.counting } } +
         extras.count { it.recorded && it.counting && it.loggable }
     val unrecordedEligible: Int get() = total - recorded
 }
@@ -121,34 +117,6 @@ data class ConflictInfo(
 )
 
 data class CopyResult(val created: Int, val conflicts: List<ConflictInfo>, val kind: DayKind)
-
-data class DlApplyResult(val eventId: UUID, val applied: Int, val conflicts: List<UUID>)
-
-enum class DlEventStatus { PENDING, APPROVED, REJECTED, MIXED, EMPTY }
-
-data class DlEventView(
-    val id: UUID,
-    val title: String?,
-    val createdAt: Long,
-    val status: DlEventStatus,
-    val periods: Int,
-    val pending: Int,
-    val approved: Int,
-    val rejected: Int,
-    val dates: Int,
-    val dateLabels: List<LocalDate>,
-    val courseNames: List<String>,
-)
-
-data class DlStats(
-    val distinctDates: Int,
-    val events: Int,
-    val pending: Int,
-    val approved: Int,
-    val rejected: Int,
-    val openingPending: Long,
-    val openingApproved: Long,
-)
 
 data class SemesterInfo(val entity: SemesterEntity, val courseCount: Int) {
     val semester: Semester
@@ -184,7 +152,6 @@ data class BackupPreview(
     val courses: Int,
     val sessions: Int,
     val outcomes: Int,
-    val dlEvents: Int,
 )
 
 interface NinetyRepository {
@@ -194,10 +161,8 @@ interface NinetyRepository {
     fun observeDay(semesterId: UUID, date: LocalDate): Flow<DayView>
     fun observeMonth(semesterId: UUID, month: YearMonth): Flow<List<DaySummary>>
     fun observeIncompleteDates(semesterId: UUID, through: LocalDate): Flow<List<LocalDate>>
-    fun observeDlEvents(semesterId: UUID): Flow<List<DlEventView>>
-    fun observeDlEventSessions(eventId: UUID): Flow<List<SessionView>>
-    fun observeDlStats(semesterId: UUID): Flow<DlStats>
     fun observeUndoable(): Flow<UndoableAction?>
+    fun observeRecentChanges(): Flow<List<UndoableAction>>
     fun observeTemplates(semesterId: UUID): Flow<List<com.niranjan.ninety.domain.ScheduleVersion>>
     fun currentTemplate(semesterId: UUID): Flow<WeekTemplate>
 
@@ -211,8 +176,8 @@ interface NinetyRepository {
     suspend fun addCourse(semesterId: UUID, setup: CourseSetup)
     suspend fun updateCourse(courseId: UUID, input: CourseInput)
     suspend fun retireCourse(courseId: UUID)
+    suspend fun resumeCourse(courseId: UUID)
     suspend fun correctOpeningBalance(balance: OpeningBalance)
-    suspend fun resolveOpeningPendingDl(courseId: UUID, approve: Boolean)
     suspend fun updatePreferences(theme: String, haptics: Boolean, reminderEnabled: Boolean, reminderMinute: Int)
 
     suspend fun saveTemplate(semesterId: UUID, template: WeekTemplate, effectiveFrom: LocalDate): List<ConflictInfo>
@@ -221,6 +186,7 @@ interface NinetyRepository {
     suspend fun recordPeriod(sessionId: UUID, outcome: AttendanceOutcome?)
     suspend fun recordUnrecorded(sessionIds: List<UUID>, outcome: AttendanceOutcome)
     suspend fun markAllPresent(semesterId: UUID, date: LocalDate): Int
+    suspend fun markPresentFromReminder(semesterId: UUID, date: LocalDate): Int
     suspend fun setCancelled(sessionId: UUID, cancelled: Boolean)
     suspend fun setHoliday(semesterId: UUID, date: LocalDate, holiday: Boolean)
     suspend fun copyWeekday(semesterId: UUID, date: LocalDate, sourceWeekday: DayOfWeek): CopyResult
@@ -229,9 +195,7 @@ interface NinetyRepository {
     suspend fun deleteExtra(sessionId: UUID)
     suspend fun substituteCourse(sessionId: UUID, courseId: UUID)
 
-    suspend fun applyDutyLeave(semesterId: UUID, sessionIds: List<UUID>, title: String?, replace: Boolean = false): DlApplyResult
-    suspend fun updateDlStatus(eventId: UUID, status: DlStatus, sessionIds: Set<UUID>? = null)
-    suspend fun removeDutyLeaveRequest(eventId: UUID)
+    suspend fun markDutyLeave(semesterId: UUID, sessionIds: List<UUID>, replace: Boolean = false): List<UUID>
     suspend fun undo(batchId: UUID): UndoResult
 
     suspend fun exportBackup(): ByteArray

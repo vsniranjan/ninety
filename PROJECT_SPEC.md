@@ -10,7 +10,7 @@
 
 ## 1. Product vision
 
-Build a genuinely polished, fast, reliable, **offline-only Android attendance tracker** intended for daily use by college students. At the beginning of a semester, students define courses and a recurring Monday–Friday timetable. At the end of each college day, they record attendance with as little effort as possible. The app shows attendance **for each course separately**, approved and pending duty-leave credit, and how many further attendance-counting periods can be missed while remaining at **90% or higher**.
+Build a genuinely polished, fast, reliable, **offline-only Android attendance tracker** intended for daily use by college students. At the beginning of a semester, students define courses and a recurring Monday–Friday timetable. At the end of each college day, they record attendance with as little effort as possible. The app shows attendance **for each course separately**, duty leave credit, and how many further attendance-counting periods can be missed while remaining at **90% or higher**.
 
 Three non-negotiable priorities:
 
@@ -63,6 +63,7 @@ Friday's P5/P6 times are consistent with the stated 14:00–16:00 block. The reg
 - A copied weekday is different from an ordinary extra class: a copied full academic timetable is attendance-counting when its periods are conducted and logged.
 - Special-day schedule copying must not duplicate existing dated period records. Reapplying or modifying a copied timetable must be safe and explain conflicts if entries already contain attendance.
 - A one-tap **Mark as Holiday / No Classes** action must be reversible. Holiday dates and individually cancelled/not-conducted periods contribute **zero** to the attendance denominator. Never silently erase previously entered records; preserve or explicitly confirm changes so reversal is safe.
+- A future date can be marked as a holiday or have that mark removed. It contributes zero units and does not generate attendance obligations before it arrives. Copying a weekday and adding extras are available once the selected date arrives.
 - The six standard slots are fixed for normal schedules. Supplemental activities may be displayed separately from those six slots if appropriate; do not compromise the attendance unit model.
 
 ## 3. Semester and course setup
@@ -72,8 +73,8 @@ Friday's P5/P6 times are consistent with the stated 14:00–16:00 block. The reg
 - Create/edit courses using a name and optional color. Do not require or display a separate short name or course code. Keep names unique for new or renamed courses within the same semester; distinguish **lab** courses from theory/other courses for grouping/presentation, while calculating every course independently.
 - One active semester at a time; archive and browse earlier semesters without losing data.
 - Provide thoughtful first-run onboarding that creates a semester, courses, and weekly timetable quickly.
-- Support **starting midway through a semester**: for each course, enter opening cumulative counts for **conducted**, **physically attended**, **approved DL**, and **pending DL** periods. These represent historical attendance before the user began logging dated periods.
-- Opening counts must be nonnegative, and `physically attended + approved DL + pending DL <= conducted` must always hold. Remaining conducted periods in the opening balance are effectively absent. Do not double-count opening balances and dated sessions. Opening balances must be reviewable/editable with safeguards.
+- Support **starting midway through a semester**: for each course, enter opening cumulative counts for **conducted**, **physically attended**, and **duty leave** periods. These represent historical attendance before the user began logging dated periods.
+- Opening counts must be nonnegative, and `physically attended + duty leave <= conducted` must always hold. Remaining conducted periods in the opening balance are effectively absent. Do not double-count opening balances and dated sessions. Opening balances must be reviewable/editable with safeguards.
 - A starting balance is an aggregate historical snapshot, **not** a fabricated set of dated classes. It must coexist cleanly with subsequent dated attendance and import/export.
 
 ## 4. Dated sessions, logging, and edits
@@ -87,18 +88,16 @@ A dated, attendance-eligible period can be:
 - **Unrecorded** — user has not entered a result; must be excluded from both the numerator and denominator.
 - **Present** — conducted and physically attended.
 - **Absent** — conducted and not credited.
-- **Duty leave: Pending** — conducted; provisional attendance credit.
-- **Duty leave: Approved** — conducted; confirmed credit.
-- **Duty leave: Rejected** — conducted; no credit (equivalent to absent for attendance math, but preserve DL history).
+- **Duty leave** — conducted and credited.
 - **Cancelled / Not conducted** — no attendance unit; excluded from the numerator and denominator.
 
 An entire **Holiday / No Classes** date also contributes zero units. Do not confuse *scheduled*, *generated*, *conducted*, and *recorded*; only **recorded, conducted, attendance-counting** periods enter the percentage. Future scheduled periods do not enter totals. For a non-counting supplemental class, tracking its occurrence must not affect attendance statistics.
 
 ### 4.2 Low-friction daily workflow
 
-- Today-first home dashboard: six normal slots where relevant, with compact present/absent/DL controls and clear progress through today's records.
+- Today-first home dashboard: six normal slots where relevant, with compact present/absent controls and clear progress through today's records. When all eligible periods are recorded, show a clear completion state and keep period details available through a review action.
 - **Mark All Present** is a prominent action that marks **only eligible, unrecorded, attendance-counting** sessions. It must **never overwrite** previously recorded absences, duty leave, present entries, holidays, or cancellations.
-- Lab UX: present a typical three-consecutive-period lab as one appealing grouped card with **one-tap group actions** (present, absent, DL), plus an **expand/edit per period** option. Never merge the underlying three attendance units.
+- Lab UX: present a typical three-consecutive-period lab as one compact group with one-tap present/absent actions for unrecorded periods and an **expand/edit per period** option. Keep duty leave as a secondary action. Never merge the underlying three attendance units.
 - Easy full-day and selected-period duty leave logging.
 - View and correct any previous date; offer safe undo for recent accidental changes.
 - Calendar/history makes missing, incomplete, holiday, and special timetable days obvious.
@@ -114,17 +113,11 @@ An entire **Holiday / No Classes** date also contributes zero units. Do not conf
 
 ## 5. Duty leave (DL)
 
-DL can cover one period, several selected periods, a three-period lab, or a whole day. A DL application/event may relate to multiple course periods, but each period must receive at most **one** attendance outcome/credit; overlapping events cannot double-count credit.
+Mark duty leave on an eligible dated period through its actions. The day and lab actions can mark several periods together. Confirm before a bulk edit replaces existing attendance marks.
 
-- Status lifecycle: **Pending -> Approved or Rejected**, with the ability to correct earlier entries.
-- **Pending DL counts as attendance provisionally**, because it is usually approved at this college. The **primary percentage and primary safe-skip calculation must include pending + approved DL**, as explicitly requested.
-- Approved DL is confirmed attendance credit without being physically present.
-- Rejected DL loses its credit and is counted as uncredited absence for that period unless the user corrects the underlying entry.
-- Retain a distinct, visible indication when displayed numbers rely on **pending** approval. Do not misrepresent provisional safe skips as certain.
-- Optionally show a **confirmed-only comparison** (excluding pending DL), but this is **secondary**; it must not replace the requested provisional primary figure.
-- Per-course statistics: physical presence, pending DL periods, approved DL periods, rejected DL periods, total credited attendance, effective percentage.
-- Semester statistics: **distinct dates with DL**, DL **events/requests**, and total DL **periods** (with breakdown by status). These are different metrics; name them clearly and avoid double-counting a day with several DL periods.
-- Retroactive DL status updates must immediately recalculate affected courses and safe-skip allowances.
+- Each period has one attendance outcome. A duty leave mark earns credit immediately and stays distinct from physical attendance.
+- If leave is rejected, change the period to Absent or Present, or clear the mark.
+- Course details show physically attended periods and duty leave periods. Corrections recalculate the course totals and safe-skip allowance.
 
 ## 6. Exact attendance calculations
 
@@ -134,30 +127,25 @@ For each course:
 
 - `N0` = opening balance conducted periods.
 - `P0` = opening balance physically present periods.
-- `DA0` = opening balance approved DL periods.
-- `DP0` = opening balance pending DL periods.
-- `N1` = number of **dated, attendance-counting, recorded and conducted** periods (present, absent, or DL of any status).
+- `DL0` = opening balance duty leave periods.
+- `N1` = number of **dated, attendance-counting, recorded and conducted** periods (present, absent, or duty leave).
 - `P1` = dated physically present periods.
-- `DA1` = dated approved DL periods.
-- `DP1` = dated pending DL periods.
+- `DL1` = dated duty leave periods.
 - `N = N0 + N1` (conducted denominator).
 - `P = P0 + P1` (physical attendance).
-- `DA = DA0 + DA1` (approved DL).
-- `DP = DP0 + DP1` (pending DL).
-- `A = P + DA + DP` (effective credited attendance **including pending DL**).
-- `C = P + DA` (confirmed credited attendance, informational).
+- `DL = DL0 + DL1` (duty leave).
+- `A = P + DL` (credited attendance).
 
-Rejected DL remains in the denominator but not `A` or `C`; cancelled/not-conducted, unrecorded, future, and non-counting supplemental sessions contribute to **none** of these totals.
+Cancelled, unrecorded, future, and non-counting supplemental sessions contribute to neither total.
 
 For `N > 0`:
 
-- **Primary attendance percentage:** `100 * A / N`.
-- **Confirmed comparison:** `100 * C / N`.
+- **Attendance percentage:** `100 * A / N`.
 - **Meets minimum:** `10 * A >= 9 * N` (exact, inclusive 90%).
 - **Safe skips (additional absent, attendance-counting periods):** `max(0, floor((10*A - 9*N) / 9))`.
 - **Recovery (additional consecutive attended, attendance-counting periods to reach 90%):** `max(0, 9*N - 10*A)`.
 
-The safe-skip formula assumes each additional missed period counts as conducted and receives no attendance credit; the recovery formula assumes each additional conducted period is fully attended and no other changes occur. Both are for the **same course**, never total semester attendance. With pending DL, both are provisional.
+The safe-skip formula assumes each additional missed period counts as conducted and receives no attendance credit; the recovery formula assumes each additional conducted period is fully attended and no other changes occur. Both are for the **same course**, never total semester attendance.
 
 For `N = 0`, show **No attendance recorded**, and do not misleadingly display `0%`, `100%`, or a meaningful skip allowance. Show safe skips as unavailable/zero with an explanatory state.
 
@@ -174,8 +162,8 @@ Incomplete past records must carry a visible **incomplete-data** warning on affe
 | `N=10, A=8` | `80%`, recovery requires `10` consecutive attended periods |
 | Three-period lab, two present and one absent | Adds `N=3`, `A=2` |
 | One Friday 45-minute period marked present | Adds `N=1`, `A=1` |
-| One pending DL period | Adds `N=1`, `A=1` provisionally; confirmed `C` does not include it |
-| Rejected pending DL | Numerator decreases by 1, denominator unchanged |
+| One period marked Duty leave | Adds `N=1`, `A=1` |
+| Duty leave changed to Absent | Credit decreases by one and the conducted count stays the same |
 | Unrecorded or cancelled period | Adds neither `N` nor `A` |
 | Mid-semester balance plus new sessions | Both contribute exactly once |
 | Copied Saturday counted; supplemental extra not counted | Only counted, recorded Saturday periods affect totals |
@@ -187,10 +175,9 @@ Test exact boundary inequalities, partial labs, status transitions, holidays, an
 **Visual quality is a product requirement, not a later decoration pass.** Aim for a premium, elegant, modern Android app that feels intentionally designed by skilled professionals.
 
 - **Today screen:** scheduled periods; one-tap logging; lab grouping; progress/completion; compact high-value stats.
-- **Courses/insights:** per-course effective percentage, physical vs DL credit, minimum threshold, safe period skips, recovery requirement, pending/incomplete warnings.
+- **Courses/insights:** per-course effective percentage, physical vs DL credit, minimum threshold, safe period skips, recovery requirement, incomplete records.
 - **Timetable editor:** fast weekly setup and clear day-specific overrides.
 - **History/calendar:** find and repair unrecorded days, see holidays and special days, adjust old entries.
-- **DL view:** enter, update, and inspect leave by date/event/course and approval status.
 - **Semester/settings/backup:** clear but not dominant in everyday navigation.
 - Minimal copy, excellent typographic hierarchy, harmonious colors, semantic iconography, consistent spacing, light and dark themes, responsive touch targets, polished empty states.
 - Smooth purposeful motion, subtle micro-interactions, and optional appropriate haptics; avoid animation overload; respect reduced-motion preferences.
@@ -214,7 +201,7 @@ Use neutral whites/charcoal with restrained blue actions, selection, and focus; 
 | Border/divider | `#E3E6EB` | `#30343B` |
 | Primary action | `#2457D6` | `#8AACFF` |
 
-Choose contrasting foregrounds and stronger interactive outlines where needed. Validate actual enabled component text at 4.5:1 (3:1 for large text) and essential control boundaries/focus at 3:1 in both themes. Quiet decorative dividers need not meet the interactive-boundary threshold. Green, amber, and red are reserved for meaningful status, always with text/icons. Provisional DL and incomplete records must remain distinct without large warning-colored panels.
+Choose contrasting foregrounds and stronger interactive outlines where needed. Validate actual enabled component text at 4.5:1 (3:1 for large text) and essential control boundaries/focus at 3:1 in both themes. Quiet decorative dividers need not meet the interactive-boundary threshold. Green, amber, and red are reserved for meaningful status, always with text/icons. Duty leave and incomplete records must remain distinct without large warning-colored panels.
 
 Refinement of existing Phase 1 screens is a **Phase 1 exit criterion**: compact typography, intentional spacing/hierarchy, usable forms/buttons/feedback, empty/error/loading states, and restrained neutral surfaces. Avoid excessive cards, oversized headings, decoration, and large tinted panels. Review available local previews/screenshots in both themes, including 200% text, keyboard handling, 48 dp targets, and scrolling; address visible defects. A connected phone and physical-device visual approval are not phase exit requirements. Phase 7 retains broader refinement of later screens.
 
@@ -239,10 +226,9 @@ The domain should explicitly represent:
 4. Dated class/period session, its origin (recurring, copied/special, manual), its countability, and its resolution.
 5. Attendance outcome per countable period.
 6. Optional visual **lab grouping** referencing underlying periods.
-7. Duty leave event/request, approval status, and covered periods.
-8. Opening balance per course.
-9. Holiday/day override and individual cancellations.
-10. Backup schema version and local preferences.
+7. Opening balance per course.
+8. Holiday/day override and individual cancellations.
+9. Backup schema version and local preferences.
 
 This is a **conceptual model**, not a mandate for one-to-one database tables. Produce a proposed relational schema and explain referential integrity, uniqueness, and transaction boundaries during planning.
 
@@ -261,7 +247,8 @@ Important invariants:
 
 - Completely functional offline; no server, user accounts, cloud database, analytics/telemetry, or unnecessary internet permission.
 - Local storage only; **disable Android automatic cloud backup** for app data. Do not confuse this with the explicitly requested user-initiated local export/import.
-- Export an entire portable, **versioned** backup with semesters, courses, opening balances, recurring schedules, overrides, holidays, countable and supplemental sessions, attendance, DL events/statuses, and relevant settings.
+- Export an entire portable, **versioned** backup with semesters, courses, opening balances, recurring schedules, overrides, holidays, countable and supplemental sessions, attendance, and relevant settings.
+- Settings records the time of the last successful backup export on this device and offers a quiet reminder after 30 days. This timestamp is device-local and is excluded from portable backups and the undo journal.
 - Use Android's Storage Access Framework/system picker and share intents where sensible; don't require broad filesystem permissions.
 - Restore flow: select file -> validate full contents/version/referential consistency -> preview relevant information and clearly warn that this is a **replacement**, not a merge -> obtain explicit confirmation -> perform an **all-or-nothing** restore. Invalid/corrupt/incompatible files must not damage existing data.
 - Preserve IDs and logical relationships correctly through export/import; prove the round trip with tests.
@@ -279,7 +266,7 @@ Write correct code for the specified cases and boundaries, backed by proportiona
 The following is a coverage reference for relevant implemented features, not a requirement to execute every category for every phase:
 
 - Pure unit tests for every formula and 90% edge/boundary condition.
-- DL transitions, provisional vs confirmed calculations, opening balances, holiday/cancellation, unrecorded handling.
+- duty leave marking and corrections, opening balances, holiday/cancellation, unrecorded handling.
 - Lab all-or-nothing and mixed-period attendance.
 - Timetable effective-date changes, historical integrity, copied Saturday, manual non-counting extras, and duplicate prevention.
 - Room data integrity/migration tests and transaction safety.
@@ -329,7 +316,7 @@ Suggested phases (agent may improve sequencing with reasoning):
 - **Phase 2 — Semester, course, and timetable management:** onboarding, six-period weekly editor, Friday schedule, opening balances.
 - **Phase 3 — Dated sessions and attendance engine:** deterministic instances, attendance statuses, pure calculations, historical integrity, unit tests.
 - **Phase 4 — Logging UX and exceptions:** quick actions, labs, past edits, calendar, holidays, special/copy days, manual extras.
-- **Phase 5 — Duty leave and actionable insights:** DL events, provisional credit, analytics, safe skips, recovery, warnings.
+- **Phase 5 — Duty leave and actionable insights:** per-period duty leave, analytics, safe skips, recovery, warnings.
 - **Phase 6 — Portable backup/restore and preferences:** local export/import, all-or-nothing replacement, optional reminders.
 - **Phase 7 — Polish and hardening:** refined animations, accessibility, dark mode, performance, error handling, instrumented tests.
 - **Phase 8 — Device validation and public project readiness:** USB-debugging tests, fixes, documentation, screenshots, APK, CI/release checks.
@@ -342,7 +329,7 @@ A release candidate is acceptable only when:
 
 - Each course calculates independently and accurately, including 45-minute Friday periods and three-period labs.
 - Unrecorded, cancelled, holiday, future, and non-counting sessions are never silently counted.
-- Pending DL drives the **primary** percentage/skip calculation with clear provisional labeling; approval/rejection updates stats correctly.
+- Duty leave counts immediately in the percentage and skip calculation, and changing or clearing the mark updates the totals.
 - One-tap all-present, grouped lab actions, partial lab edits, date corrections, and reversible holiday marking behave correctly.
 - Copied full special days count, individually added supplemental classes do not count by default, and no duplicates are created.
 - Mid-semester opening balances work and cannot be double-counted.

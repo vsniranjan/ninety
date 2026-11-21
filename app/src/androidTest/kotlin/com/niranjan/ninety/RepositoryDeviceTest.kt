@@ -5,10 +5,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.niranjan.ninety.data.CourseInput
 import com.niranjan.ninety.data.CourseSetup
-import com.niranjan.ninety.data.DlStatus
 import com.niranjan.ninety.data.NinetyDatabase
 import com.niranjan.ninety.data.RoomNinetyRepository
 import com.niranjan.ninety.data.SemesterSetup
+import com.niranjan.ninety.domain.AttendanceOutcome
 import com.niranjan.ninety.domain.CourseType
 import com.niranjan.ninety.domain.OpeningBalance
 import com.niranjan.ninety.domain.WeekTemplate
@@ -113,30 +113,18 @@ class RepositoryDeviceTest {
             .session!!.loggable)
     }
 
-    @Test fun pendingDutyLeaveCreditsProvisionallyThenApprovalConfirms() = runBlocking {
+    @Test fun dutyLeaveCreditsImmediatelyAndCanBeChangedToAbsent() = runBlocking {
         seed()
         val theory = day().groups.flatMap { it.cells }.mapNotNull { it.session }
             .single { it.courseId == theoryId }
-        val result = repository.applyDutyLeave(semesterId, listOf(theory.id), "Seminar", replace = false)
-        assertEquals(1, result.applied)
-        assertTrue(result.conflicts.isEmpty())
+        repository.recordPeriod(theory.id, AttendanceOutcome.DUTY_LEAVE)
+        assertEquals(1L, stats(theoryId).conducted)
+        assertEquals(1L, stats(theoryId).credited)
+        assertEquals(1L, stats(theoryId).dutyLeave)
 
-        var summary = stats(theoryId)
-        assertEquals(1L, summary.conducted)
-        assertEquals(1L, summary.credited)
-        assertEquals(0L, summary.confirmedCredited)
-        assertTrue(summary.isProvisional)
-
-        repository.updateDlStatus(result.eventId, DlStatus.APPROVED)
-        summary = stats(theoryId)
-        assertEquals(1L, summary.credited)
-        assertEquals(1L, summary.confirmedCredited)
-        assertFalse(summary.isProvisional)
-
-        repository.updateDlStatus(result.eventId, DlStatus.REJECTED)
-        summary = stats(theoryId)
-        assertEquals(1L, summary.conducted)
-        assertEquals(0L, summary.credited)
+        repository.recordPeriod(theory.id, AttendanceOutcome.ABSENT)
+        assertEquals(1L, stats(theoryId).conducted)
+        assertEquals(0L, stats(theoryId).credited)
     }
 
     @Test fun holidayExcludesSessionsAndUndoRestoresThem() = runBlocking {
@@ -157,7 +145,7 @@ class RepositoryDeviceTest {
         repository.markAllPresent(semesterId, monday)
         val theory = day().groups.flatMap { it.cells }.mapNotNull { it.session }
             .single { it.courseId == theoryId }
-        repository.applyDutyLeave(semesterId, listOf(theory.id), "Seminar", replace = true)
+        repository.markDutyLeave(semesterId, listOf(theory.id), replace = true)
 
         val bytes = repository.exportBackup()
         val preview = repository.validateBackup(bytes)
@@ -165,11 +153,10 @@ class RepositoryDeviceTest {
         assertEquals(2, preview.courses)
         assertEquals(4, preview.sessions)
         assertEquals(4, preview.outcomes)
-        assertEquals(1, preview.dlEvents)
 
         repository.restoreBackup(bytes)
         assertEquals(4, day().groups.flatMap { it.cells }.count { it.session?.recorded == true })
-        assertEquals(1L, stats(theoryId).pendingDl)
+        assertEquals(1L, stats(theoryId).dutyLeave)
         assertEquals(3L, stats(labId).physicallyPresent)
     }
 

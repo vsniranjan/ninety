@@ -17,22 +17,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,29 +54,39 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.niranjan.ninety.R
 import com.niranjan.ninety.data.DayView
 import com.niranjan.ninety.data.SessionView
+import com.niranjan.ninety.data.SlotCell
 import com.niranjan.ninety.data.SlotGroup
 import com.niranjan.ninety.domain.AttendanceOutcome
 import com.niranjan.ninety.domain.DayKind
+import com.niranjan.ninety.domain.PeriodTimes
 import com.niranjan.ninety.domain.SessionOrigin
 import com.niranjan.ninety.ui.collegeWeekdays
 import com.niranjan.ninety.ui.designsystem.ActionIcon
 import com.niranjan.ninety.ui.designsystem.ActionRow
+import com.niranjan.ninety.ui.designsystem.BackToTodayButton
+import com.niranjan.ninety.ui.designsystem.CapsText
 import com.niranjan.ninety.ui.designsystem.ConfirmDialog
 import com.niranjan.ninety.ui.designsystem.EmptyState
+import com.niranjan.ninety.ui.designsystem.GhostButton
+import com.niranjan.ninety.ui.designsystem.NinetyAlertDialog
 import com.niranjan.ninety.ui.designsystem.NinetyDatePicker
+import com.niranjan.ninety.ui.designsystem.NinetyDimensions
+import com.niranjan.ninety.ui.designsystem.NinetyMenu
 import com.niranjan.ninety.ui.designsystem.OutcomeChip
 import com.niranjan.ninety.ui.designsystem.PeriodProgress
 import com.niranjan.ninety.ui.designsystem.PrimaryAction
@@ -96,7 +103,7 @@ import java.util.UUID
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
-    snackbar: SnackbarHostState, onEditTimetable: () -> Unit, addDutyLeave: Boolean = false,
+    snackbar: SnackbarHostState, onEditTimetable: () -> Unit,
     archived: Boolean = false, semesterStart: LocalDate, resetToToday: Int = 0) {
     var selectedEpochDay by rememberSaveable(semesterId.toString(), resetToToday) { mutableStateOf(initialDate?.toEpochDay()) }
     var catchingUp by rememberSaveable(semesterId.toString(), resetToToday) { mutableStateOf(false) }
@@ -124,24 +131,11 @@ fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
 
     var selected by remember(date) { mutableStateOf<SessionView?>(null) }
     var dialog by rememberSaveable(date.toEpochDay()) { mutableStateOf<DayDialog?>(null) }
-    var dlSelection by remember(date) { mutableStateOf<Set<UUID>?>(null) }
+    var leavePicker by remember(date) { mutableStateOf<DutyLeaveSelection?>(null) }
     var menuOpen by remember(date) { mutableStateOf(false) }
     var replaceLeave by remember(date) { mutableStateOf<(() -> Unit)?>(null) }
     var copyResult by remember(date) { mutableStateOf<com.niranjan.ninety.data.CopyResult?>(null) }
     var markedCopyConflicts by remember(date) { mutableIntStateOf(0) }
-
-    var launchLeave by rememberSaveable { mutableStateOf(addDutyLeave) }
-    val noPeriodsForLeave = stringResource(R.string.no_periods_for_leave)
-    LaunchedEffect(day, launchLeave) {
-        if (day != null && launchLeave) {
-            if (!beforeSemester && day.writable && !day.holiday && day.total > 0) {
-                dlSelection = emptySet()
-            } else {
-                model.messages.value = noPeriodsForLeave
-            }
-            launchLeave = false
-        }
-    }
 
     LaunchedEffect(message) { displayedMessage?.let { snackbar.showSnackbar(it); model.dismissMessage() } }
 
@@ -180,24 +174,26 @@ fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
                 model.recordUnrecorded(group.pendingPeriods().map { it.id }, outcome)
             },
             onGroupLeave = { group ->
-                dlSelection = group.countingPeriods().map { it.id }.toSet()
+                val ids = group.countingPeriods().filter { it.canMarkDutyLeave }.map { it.id }.toSet()
+                leavePicker = DutyLeaveSelection(scope = ids, selected = ids)
             },
             onMarkAll = { tapHaptic(); model.markAllPresent() },
             onToggleHoliday = { dialog = DayDialog.Holiday },
             onCopyDay = { dialog = DayDialog.CopyDay },
             onEditTimetable = onEditTimetable,
             onAddExtra = { dialog = DayDialog.Extra },
-            onApplyLeave = { dlSelection = emptySet() },
+            onApplyLeave = { leavePicker = DutyLeaveSelection() },
             menuOpen = menuOpen, onMenu = { menuOpen = it },
         ) }
     }
 
     selected?.let { session ->
         val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { selected = null }, sheetState = sheetState) {
+        ModalBottomSheet(onDismissRequest = { selected = null }, sheetState = sheetState,
+            shape = NinetyDimensions.sheet, containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp) {
             SessionActions(session, courses.map { UUID.fromString(it.id) to it.name },
                 onRecord = { outcome -> model.record(session.id, outcome); selected = null },
-                onLeave = { dlSelection = setOf(session.id); selected = null },
                 onCancel = { cancelled -> model.setCancelled(session.id, cancelled); selected = null },
                 onSubstitute = { courseId -> model.substitute(session.id, courseId); selected = null },
                 onCounting = { counting -> model.setExtraCounting(session.id, counting); selected = null },
@@ -209,7 +205,9 @@ fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
     when (dialog) {
         DayDialog.Holiday -> ConfirmDialog(
             title = stringResource(if (day?.holiday == true) R.string.remove_holiday_question else R.string.mark_holiday_question),
-            body = if (day?.holiday == true)
+            body = if (day?.future == true)
+                stringResource(if (day.holiday) R.string.remove_future_holiday_body else R.string.future_holiday_body)
+            else if (day?.holiday == true)
                 "Classes on this day will count toward attendance again."
             else
                 stringResource(R.string.keep_marked_holiday),
@@ -242,8 +240,8 @@ fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
             onDismiss = { replaceLeave = null })
     }
     copyResult?.takeIf { it.conflicts.isNotEmpty() }?.let { result ->
-        AlertDialog(onDismissRequest = { copyResult = null },
-            title = { Text(stringResource(R.string.timetable_applied)) },
+        NinetyAlertDialog(onDismissRequest = { copyResult = null },
+            title = { CapsText(stringResource(R.string.timetable_applied)) },
             text = {
                 val added = pluralStringResource(R.plurals.added_periods, result.created, result.created)
                 val marked = markedCopyConflicts
@@ -256,25 +254,33 @@ fun DayScreen(semesterId: UUID, initialDate: LocalDate?, today: LocalDate,
             confirmButton = { TextButton(onClick = { copyResult = null }) { Text(stringResource(R.string.done)) } })
     }
 
-    dlSelection?.let { selection ->
+    leavePicker?.let { picker ->
         val eligible = day?.let { d ->
-            (d.groups.flatMap { it.cells.mapNotNull { c -> c.session } } + d.extras)
-                .filter { it.loggable && it.counting }
-        } ?: emptyList()
-        DutyLeaveDialog(eligible, selection,
-            onSelectAll = { dlSelection = eligible.map { it.id }.toSet() },
-            onToggle = { id -> dlSelection = if (id in selection) selection - id else selection + id },
-            onConfirm = { title ->
-                val ids = selection.toList()
-                if (ids.isEmpty()) return@DutyLeaveDialog
-                model.applyDutyLeave(ids, title, replace = false) {
-                    replaceLeave = { model.applyDutyLeave(ids, title, replace = true) }
-                }
-                dlSelection = null
+            (d.groups.flatMap { it.cells.mapNotNull { cell -> cell.session } } + d.extras)
+                .filter { it.canMarkDutyLeave && (picker.scope == null || it.id in picker.scope) }
+        }.orEmpty()
+        val selectedIds = eligible.mapNotNull { it.id.takeIf(picker.selected::contains) }.toSet()
+        DutyLeaveDialog(eligible, selectedIds,
+            onSelectAll = { leavePicker = picker.copy(selected = eligible.map { it.id }.toSet()) },
+            onToggle = { id ->
+                val selected = if (id in selectedIds) selectedIds - id else selectedIds + id
+                leavePicker = picker.copy(selected = selected)
             },
-            onDismiss = { dlSelection = null })
+            onConfirm = {
+                val ids = selectedIds.toList()
+                model.markDutyLeave(ids) {
+                    replaceLeave = { model.markDutyLeave(ids, replace = true) }
+                }
+                leavePicker = null
+            },
+            onDismiss = { leavePicker = null })
     }
 }
+
+private data class DutyLeaveSelection(val scope: Set<UUID>? = null, val selected: Set<UUID> = emptySet())
+
+private val SessionView.canMarkDutyLeave: Boolean
+    get() = loggable && counting && outcome != AttendanceOutcome.DUTY_LEAVE
 
 private enum class DayDialog { Holiday, CopyDay, Extra }
 
@@ -297,11 +303,18 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
     val recorded = day.recorded
     val remaining = total - recorded
     val complete = !day.future && !day.holiday && total > 0 && remaining == 0
+    val showProgress = remaining > 0 && !day.holiday && !day.future
     val hasSchedule = day.extras.isNotEmpty() ||
         day.groups.any { group -> group.cells.any { it.session != null || it.projectedCourseId != null } }
     var showHolidaySchedule by rememberSaveable(day.holiday) { mutableStateOf(false) }
     val canEditDay = day.writable && (!beforeSemester || hasSchedule || day.holiday)
+    val canChangeHoliday = canEditDay || (day.future && (!beforeSemester || day.holiday))
     val writable = canEditDay && !day.holiday
+    val canMarkLeave = day.groups.any { group -> group.cells.any { it.session?.canMarkDutyLeave == true } } ||
+        day.extras.any { it.canMarkDutyLeave }
+    val returnToToday: @Composable () -> Unit = {
+        BackToTodayButton(onClick = onToday, enabled = !busy, modifier = Modifier.testTag("return_today"))
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -313,9 +326,11 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
                     heading()
                 }) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(day.date.dayOfWeek.fullName(), style = MaterialTheme.typography.titleMedium)
+                    Text(day.date.dayOfWeek.fullName(), style = MaterialTheme.typography.titleLarge,
+                        textAlign = TextAlign.Center)
                     Text(day.date.format(java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy")),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center)
                 }
             }
             ActionIcon(R.drawable.ic_forward, stringResource(R.string.next_day), onNext,
@@ -324,9 +339,13 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
                 IconButton(onClick = { onMenu(true) }, enabled = !busy, modifier = Modifier.testTag("day_menu")) {
                     Icon(painterResource(R.drawable.ic_more), stringResource(R.string.day_actions))
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenu(false) }) {
-                    DropdownMenuItem(text = { Text(stringResource(if (day.holiday) R.string.undo_holiday else R.string.no_classes_today)) },
-                        onClick = { onMenu(false); onToggleHoliday() }, enabled = canEditDay,
+                NinetyMenu(expanded = menuOpen, onDismissRequest = { onMenu(false) }) {
+                    DropdownMenuItem(text = { Text(stringResource(when {
+                            day.holiday -> R.string.undo_holiday
+                            day.future -> R.string.mark_holiday
+                            else -> R.string.no_classes_today
+                        })) },
+                        onClick = { onMenu(false); onToggleHoliday() }, enabled = canChangeHoliday,
                         leadingIcon = { Icon(painterResource(R.drawable.ic_holiday), null) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.use_weekday_timetable_menu)) },
                         onClick = { onMenu(false); onCopyDay() }, enabled = canEditDay,
@@ -335,19 +354,17 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
                         onClick = { onMenu(false); onAddExtra() }, enabled = canEditDay,
                         leadingIcon = { Icon(painterResource(R.drawable.ic_add), null) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.duty_leave_menu)) },
-                        onClick = { onMenu(false); onApplyLeave() }, enabled = writable && total > 0,
+                        onClick = { onMenu(false); onApplyLeave() }, enabled = writable && canMarkLeave,
                         leadingIcon = { Icon(painterResource(R.drawable.ic_leave), null) })
                 }
             }
         }
 
-        if (!isToday) {
-            AssistChip(onClick = onToday, label = { Text(stringResource(R.string.today)) },
-                enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("return_today"))
-        }
+        if (!isToday && !showProgress && !complete) returnToToday()
+        if (day.future) Banner(stringResource(R.string.mark_future_day))
         if (beforeSemester) {
             if (!hasSchedule && !day.holiday) {
-                EmptyState(stringResource(R.string.before_semester_start), "")
+                EmptyState(stringResource(R.string.before_semester_start))
                 return@Column
             }
             Banner(stringResource(R.string.before_semester_start))
@@ -359,7 +376,7 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
                 Banner(if (weekday != null) stringResource(R.string.following_timetable, weekday.fullName())
                     else stringResource(R.string.day_timetable_edited))
             }
-            day.weekend -> Banner(stringResource(R.string.weekend))
+            day.weekend && hasSchedule -> Banner(stringResource(R.string.weekend))
         }
         Spacer(Modifier.height(12.dp))
         catchUp()
@@ -375,18 +392,19 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
                 val present = outcomes.count { it.outcome == AttendanceOutcome.PRESENT }
                 val absent = outcomes.count { it.outcome == AttendanceOutcome.ABSENT }
                 val summary = stringResource(R.string.all_marked, total, present, absent)
-                val dutyLeave = recorded - present - absent
+                val dutyLeave = outcomes.count { it.outcome == AttendanceOutcome.DUTY_LEAVE }
                 Text(if (dutyLeave > 0) stringResource(R.string.day_duty_leave_total, summary, dutyLeave) else summary,
-                    style = MaterialTheme.typography.labelLarge)
+                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                if (!isToday) returnToToday()
             }
-        } else if (remaining > 0 && !day.holiday && !day.future) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(stringResource(R.string.mark_progress, recorded, total), style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("day_progress"))
-                Text(stringResource(R.string.recorded_day_left, remaining), style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (showProgress) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.mark_progress, recorded, total),
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f).testTag("day_progress"))
+                if (!isToday) returnToToday()
             }
-            PeriodProgress(recorded, total, Modifier.padding(top = 10.dp, bottom = 20.dp))
+            PeriodProgress(recorded, total, Modifier.padding(top = if (isToday) 8.dp else 0.dp, bottom = 12.dp))
         } else if (hasSchedule && !day.future && !day.holiday) {
             Banner(stringResource(R.string.no_attendance_to_mark))
         }
@@ -396,16 +414,21 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
                 Text(stringResource(R.string.next_unmarked_day))
             }
         }
-        if (day.future && !day.holiday && hasSchedule) Banner(stringResource(R.string.mark_future_day))
         if (writable && remaining > 0) {
             val label = stringResource(if (recorded == 0) R.string.mark_all_present else R.string.mark_remaining_present)
             val modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp).testTag("mark_all")
             if (archived) {
-                OutlinedButton(onClick = onMarkAll, enabled = !busy, modifier = modifier.heightIn(min = 48.dp)) {
-                    Text(label)
+                GhostButton(onClick = onMarkAll, enabled = !busy, modifier = modifier.heightIn(min = 48.dp)) {
+                    CapsText(label)
                 }
             } else {
-                PrimaryAction(label, onMarkAll, modifier = modifier, enabled = !busy)
+                FilledTonalButton(onClick = onMarkAll, modifier = modifier.heightIn(min = 48.dp),
+                    enabled = !busy, shape = NinetyDimensions.pill) {
+                    Icon(painterResource(R.drawable.ic_check), contentDescription = null,
+                        modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(label)
+                }
             }
         }
         if (day.holiday && hasSchedule) {
@@ -417,20 +440,24 @@ private fun DayContent(day: DayView, isToday: Boolean, busy: Boolean, archived: 
         if (!hasSchedule && !day.holiday) {
             EmptyState(
                 title = stringResource(if (day.weekend) R.string.no_weekend_classes else R.string.no_timetable_classes),
-                body = "",
                 actionLabel = stringResource(if (day.weekend) R.string.working_day else R.string.edit_timetable),
                 onAction = if (day.weekend) onCopyDay.takeIf { writable } else onEditTimetable)
         } else if (hasSchedule && (!day.holiday || showHolidaySchedule)) {
-            day.groups.filter { !day.holiday || it.courseId != null }.forEach { group ->
-                key(group.cells.first().slot) {
-                    GroupCard(group, writable, busy, onSessionClick, onQuickRecord,
-                        onGroupOutcome = { outcome -> onGroupOutcome(group, outcome) },
-                        onGroupLeave = { onGroupLeave(group) })
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                day.groups.filter { !day.holiday || it.courseId != null }.forEach { group ->
+                    key(group.cells.first().slot) {
+                        GroupCard(group, writable, busy, onSessionClick, onQuickRecord,
+                            onGroupOutcome = { outcome -> onGroupOutcome(group, outcome) },
+                            onGroupLeave = { onGroupLeave(group) })
+                    }
                 }
-            }
-            day.extras.forEach { extra ->
-                SessionCard(extra, null, writable, busy, onSessionClick, onQuickRecord)
-                Spacer(Modifier.height(8.dp))
+                day.extras.forEach { extra ->
+                    key(extra.id) {
+                        ScheduleCard {
+                            SessionPeriod(extra, writable, busy, onSessionClick, onQuickRecord)
+                        }
+                    }
+                }
             }
         }
 
@@ -446,6 +473,22 @@ private fun Banner(text: String) {
 }
 
 @Composable
+private fun ScheduleCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Surface(modifier.fillMaxWidth(), shape = NinetyDimensions.listCard,
+        color = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface) {
+        Column(Modifier.padding(horizontal = NinetyDimensions.content, vertical = NinetyDimensions.small)) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun PeriodCaption(period: String, time: String, modifier: Modifier = Modifier) {
+    Text("$period · $time", modifier, style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
 private fun GroupCard(group: SlotGroup, writable: Boolean, busy: Boolean,
     onSessionClick: (SessionView) -> Unit,
     onQuickRecord: (SessionView, AttendanceOutcome) -> Unit,
@@ -453,96 +496,108 @@ private fun GroupCard(group: SlotGroup, writable: Boolean, busy: Boolean,
     val firstCell = group.cells.first()
     val first = firstCell.session
     if (!group.grouped || first == null) {
-        group.cells.forEach { SessionCard(it.session, it, writable, busy, onSessionClick, onQuickRecord) }
-        return
-    }
-    val eligible = group.countingPeriods()
-    val remaining = eligible.count { !it.recorded }
-    var expanded by rememberSaveable(first.id.toString()) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().animateContentSize()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TimeRail("P${firstCell.slot}–${group.cells.last().slot}",
-                timeRange(first.startMinute, first.endMinute))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(first.courseName, style = MaterialTheme.typography.titleMedium)
-                        Text(pluralStringResource(R.plurals.period_count, group.cells.size, group.cells.size),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    ActionIcon(R.drawable.ic_chevron_down,
-                        stringResource(if (expanded) R.string.hide_periods else R.string.view_periods),
-                        onClick = { expanded = !expanded }, modifier = Modifier.rotate(if (expanded) 180f else 0f)
-                            .testTag("group_periods_${first.id}"))
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    group.cells.forEach { cell ->
-                        cell.session?.let { session ->
-                            OutcomeChip(session.outcome, cancelled = session.cancelled, counting = session.counting,
-                                periodLabel = slotLabel(cell.slot))
-                        }
-                    }
-                }
-                if (writable && remaining > 0) {
-                    val scope = stringResource(if (remaining == group.cells.size) R.string.all_periods else R.string.remaining_periods)
-                    Text(scope, style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    MarkControl(AttendanceOutcome.UNRECORDED, enabled = !busy, compact = false,
-                        tag = "group", presentAction = stringResource(R.string.mark_present_for, scope),
-                        absentAction = stringResource(R.string.mark_absent_for, scope), onMark = onGroupOutcome)
+        group.cells.forEach { cell ->
+            val session = cell.session
+            if (session == null) {
+                OpenSlot(cell)
+            } else {
+                ScheduleCard {
+                    SessionPeriod(session, writable, busy, onSessionClick, onQuickRecord)
                 }
             }
         }
-        if (expanded) {
-            group.cells.forEach { cell ->
-                val session = cell.session ?: return@forEach
-                SessionCard(session, cell, writable, busy, onSessionClick, onQuickRecord, showCourseName = false)
+        return
+    }
+
+    val eligible = group.countingPeriods()
+    val remaining = eligible.count { !it.recorded }
+    var expanded by rememberSaveable(first.id.toString()) { mutableStateOf(false) }
+    val periodRange = "P${firstCell.slot}–${group.cells.last().slot}"
+    ScheduleCard(Modifier.animateContentSize()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                Text(first.courseName, style = MaterialTheme.typography.titleMedium)
+                PeriodCaption(periodRange, PeriodTimes.label(first.startMinute))
             }
-            if (writable && eligible.isNotEmpty()) {
+            ActionIcon(R.drawable.ic_chevron_down,
+                stringResource(if (expanded) R.string.hide_periods else R.string.view_periods),
+                onClick = { expanded = !expanded },
+                modifier = Modifier.rotate(if (expanded) 180f else 0f).testTag("group_periods_${first.id}"))
+        }
+
+        // The header already identifies every slot when all of them are unmarked.
+        if (!expanded && (!writable || remaining != group.cells.size)) {
+            FlowRow(Modifier.padding(top = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                group.cells.forEach { cell ->
+                    cell.session?.let { session ->
+                        OutcomeChip(session.outcome, cancelled = session.cancelled, counting = session.counting,
+                            periodLabel = slotLabel(cell.slot))
+                    }
+                }
+            }
+        }
+
+        if (writable && remaining > 0) {
+            val all = remaining == group.cells.size
+            val scope = stringResource(if (all) R.string.all_periods else R.string.remaining_periods)
+            if (!all || expanded) {
+                Text(scope, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp))
+            }
+            BoxWithConstraints {
+                MarkControl(AttendanceOutcome.UNRECORDED, enabled = !busy,
+                    compact = maxWidth < 148.dp * LocalDensity.current.fontScale,
+                    tag = "group", presentAction = stringResource(R.string.mark_present_for, scope),
+                    absentAction = stringResource(R.string.mark_absent_for, scope), onMark = onGroupOutcome)
+            }
+        }
+
+        if (expanded) {
+            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                group.cells.forEach { cell ->
+                    cell.session?.let { session ->
+                        SessionPeriod(session, writable, busy, onSessionClick, onQuickRecord, showCourseName = false)
+                    }
+                }
+            }
+            if (writable && eligible.any { it.canMarkDutyLeave }) {
                 TextButton(onClick = onGroupLeave, enabled = !busy,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("group_leave")) {
                     Text(stringResource(R.string.duty_leave))
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
 @Composable
-private fun TimeRail(period: String, time: String) {
-    val railWidth = 52.dp * LocalDensity.current.fontScale.coerceIn(1f, 2f)
-    Column(Modifier.width(railWidth).padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(period, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (time.isNotEmpty()) Text(time.take(5), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun SessionCard(session: SessionView?, cell: com.niranjan.ninety.data.SlotCell?,
-    writable: Boolean, busy: Boolean, onSessionClick: (SessionView) -> Unit,
-    onQuickRecord: (SessionView, AttendanceOutcome) -> Unit, showCourseName: Boolean = true) {
-    if (session == null && cell != null) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TimeRail(slotLabel(cell.slot), timeRange(cell.startMinute, cell.endMinute))
-            Text(cell.projectedCourseName ?: stringResource(R.string.free_period), style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+private fun OpenSlot(cell: SlotCell) {
+    val title = cell.projectedCourseName
+    val period = slotLabel(cell.slot)
+    val start = PeriodTimes.label(cell.startMinute)
+    if (title == null) {
+        PeriodCaption(period, "$start · ${stringResource(R.string.free_period)}",
+            Modifier.padding(horizontal = NinetyDimensions.content, vertical = 4.dp))
+    } else {
+        ScheduleCard {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            PeriodCaption(period, start)
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        return
     }
-    session ?: return
+}
+
+@Composable
+private fun SessionPeriod(session: SessionView, writable: Boolean, busy: Boolean,
+    onSessionClick: (SessionView) -> Unit, onQuickRecord: (SessionView, AttendanceOutcome) -> Unit,
+    showCourseName: Boolean = true) {
     val period = if (session.origin == SessionOrigin.EXTRA) stringResource(R.string.extra) else slotLabel(session.slot)
-    val times = timeRange(session.startMinute, session.endMinute)
-    val hasDutyLeave = session.dlStatus != null
+    val times = if (showCourseName && session.origin != SessionOrigin.EXTRA) PeriodTimes.label(session.startMinute)
+        else timeRange(session.startMinute, session.endMinute)
     val actionable = writable && !session.suppressed
-    val canMark = actionable && session.loggable && session.counting && !hasDutyLeave
+    val canMark = actionable && session.loggable && session.counting && session.outcome != AttendanceOutcome.DUTY_LEAVE
     val identity = "${session.courseName} · $period"
     val presentAction = stringResource(R.string.mark_present_for, identity)
     val absentAction = stringResource(R.string.mark_absent_for, identity)
@@ -552,17 +607,17 @@ private fun SessionCard(session: SessionView?, cell: com.niranjan.ninety.data.Sl
         AttendanceOutcome.ABSENT -> stringResource(R.string.absent)
         else -> stringResource(R.string.not_marked)
     }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints {
         val fontScale = LocalDensity.current.fontScale
-        val compact = maxWidth < 345.dp || fontScale > 1.3f
-        val stack = maxWidth < 288.dp || fontScale > 1.3f
+        val inlineMarks = !showCourseName && canMark && maxWidth >= 296.dp * fontScale
+        val compactMarks = maxWidth < 148.dp * fontScale
         val marks: @Composable () -> Unit = {
-            MarkControl(session.outcome, enabled = !busy, compact = compact, tag = "period_${session.id}",
+            MarkControl(session.outcome, enabled = !busy, compact = compactMarks, tag = "period_${session.id}",
                 presentAction = presentAction, absentAction = absentAction, onMark = { outcome ->
                     if (outcome != session.outcome) onQuickRecord(session, outcome)
                 })
         }
-        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Column {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .then(if (actionable) Modifier.clickable(enabled = !busy, onClickLabel = openActions,
                     onClick = { onSessionClick(session) }) else Modifier)
@@ -582,34 +637,30 @@ private fun SessionCard(session: SessionView?, cell: com.niranjan.ninety.data.Sl
                             },
                         )
                     }
-                }, verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TimeRail(period, if (showCourseName) times else "")
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                }, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
                     if (showCourseName) {
                         Text(session.courseName, style = MaterialTheme.typography.titleMedium,
                             textDecoration = if (session.cancelled) TextDecoration.LineThrough else null)
-                    } else {
-                        Text(times, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (!canMark) OutcomeChip(session.outcome, cancelled = session.cancelled, counting = session.counting)
+                    PeriodCaption(period, times)
                 }
-                if (canMark && !stack) marks()
+                if (inlineMarks) marks()
                 if (actionable) ActionIcon(R.drawable.ic_more, openActions,
                     onClick = { onSessionClick(session) }, enabled = !busy,
                     modifier = Modifier.testTag("period_actions_${session.id}"))
             }
-            if (canMark && stack) Box(Modifier.align(Alignment.End)) { marks() }
+            if (canMark && !inlineMarks) marks()
+            if (!canMark) OutcomeChip(session.outcome, cancelled = session.cancelled, counting = session.counting,
+                modifier = Modifier.padding(bottom = 4.dp))
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable
 private fun SessionActions(session: SessionView,
     courses: List<Pair<UUID, String>>,
-    onRecord: (AttendanceOutcome?) -> Unit, onLeave: () -> Unit,
+    onRecord: (AttendanceOutcome?) -> Unit,
     onCancel: (Boolean) -> Unit,
     onSubstitute: (UUID) -> Unit,
     onCounting: (Boolean) -> Unit,
@@ -627,16 +678,19 @@ private fun SessionActions(session: SessionView,
                 modifier = Modifier.testTag("restore_period"))
         }
         if (session.loggable) {
-            if (!session.counting || session.dlStatus != null) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!session.counting || session.outcome == AttendanceOutcome.DUTY_LEAVE) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryAction(stringResource(R.string.present), { onRecord(AttendanceOutcome.PRESENT) },
                     modifier = Modifier.testTag("action_present"))
-                OutlinedButton(onClick = { onRecord(AttendanceOutcome.ABSENT) },
+                GhostButton(onClick = { onRecord(AttendanceOutcome.ABSENT) },
                     modifier = Modifier.heightIn(min = 52.dp).testTag("action_absent")) {
                     Icon(painterResource(R.drawable.ic_close), null, Modifier.size(20.dp))
-                    Text(stringResource(R.string.absent), Modifier.padding(start = 8.dp))
+                    CapsText(stringResource(R.string.absent), Modifier.padding(start = NinetyDimensions.small))
                 }
             }
-            if (session.counting) ActionRow(R.drawable.ic_leave, stringResource(R.string.duty_leave), onLeave)
+            if (session.canMarkDutyLeave) {
+                ActionRow(R.drawable.ic_leave, stringResource(R.string.duty_leave),
+                    { onRecord(AttendanceOutcome.DUTY_LEAVE) }, modifier = Modifier.testTag("action_duty_leave"))
+            }
             ActionRow(R.drawable.ic_minus, stringResource(R.string.class_not_held), { onCancel(true) })
             if (session.origin != SessionOrigin.EXTRA) {
                 SubstitutePicker(courses.filter { it.first != session.courseId }, onSubstitute)
@@ -664,7 +718,7 @@ private fun SubstitutePicker(courses: List<Pair<UUID, String>>, onPick: (UUID) -
     if (courses.isEmpty()) return
     Box {
         ActionRow(R.drawable.ic_courses, stringResource(R.string.different_course), { open = true }, showChevron = true)
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        NinetyMenu(expanded = open, onDismissRequest = { open = false }) {
             courses.forEach { (id, name) ->
                 DropdownMenuItem(text = { Text(name) }, onClick = { open = false; onPick(id) })
             }
@@ -674,7 +728,7 @@ private fun SubstitutePicker(courses: List<Pair<UUID, String>>, onPick: (UUID) -
 
 @Composable
 private fun CopyDayDialog(onPick: (DayOfWeek) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.choose_weekday_timetable)) },
+    NinetyAlertDialog(onDismissRequest = onDismiss, title = { CapsText(stringResource(R.string.choose_weekday_timetable)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 
@@ -690,42 +744,37 @@ private fun CopyDayDialog(onPick: (DayOfWeek) -> Unit, onDismiss: () -> Unit) {
 
 @Composable
 private fun DutyLeaveDialog(eligible: List<SessionView>, selection: Set<UUID>,
-    onSelectAll: () -> Unit, onToggle: (UUID) -> Unit, onConfirm: (String?) -> Unit, onDismiss: () -> Unit) {
-    var title by rememberSaveable { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.duty_leave)) },
+    onSelectAll: () -> Unit, onToggle: (UUID) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    NinetyAlertDialog(onDismissRequest = onDismiss, title = { CapsText(stringResource(R.string.duty_leave)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onSelectAll) {
                     Text(stringResource(R.string.select_all_periods))
                 }
-                Text(stringResource(R.string.duty_leave_credit),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 eligible.forEach { session ->
+                    val selected = session.id in selection
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                        .testTag("dl_period_${session.id}").clickable { onToggle(session.id) },
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = session.id in selection, onCheckedChange = null)
-                        Column {
+                        .testTag("dl_period_${session.id}")
+                        .toggleable(selected, role = Role.Checkbox, onValueChange = { onToggle(session.id) }),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(NinetyDimensions.small)) {
+                        Checkbox(checked = selected, onCheckedChange = null)
+                        Column(Modifier.weight(1f)) {
                             Text("${session.courseName} · ${slotLabel(session.slot)}",
-                                style = MaterialTheme.typography.bodyMedium)
-                            if (session.recorded) {
-                                Text(stringResource(R.string.replaces_existing_mark),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error)
-                            }
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface)
+                            if (session.recorded) Text(stringResource(R.string.calendar_marked),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-                OutlinedTextField(value = title, onValueChange = { title = it },
-                    label = { Text("Reason (optional)") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(title.ifBlank { null }) },
-                enabled = selection.isNotEmpty(), modifier = Modifier.testTag("dl_confirm")) {
-                Text(pluralStringResource(R.plurals.apply_periods, selection.size, selection.size))
+            TextButton(onClick = onConfirm, enabled = selection.isNotEmpty(),
+                modifier = Modifier.testTag("dl_confirm")) {
+                Text(pluralStringResource(R.plurals.mark_periods, selection.size, selection.size))
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })

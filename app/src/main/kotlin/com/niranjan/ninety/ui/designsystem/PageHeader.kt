@@ -13,17 +13,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun ScreenHeading(title: String, detail: String? = null,
     detailAction: @Composable (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 20.dp),
+    Row(Modifier.fillMaxWidth().padding(top = NinetyDimensions.gutter, bottom = NinetyDimensions.content),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium,
+        horizontalArrangement = Arrangement.spacedBy(NinetyDimensions.small)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NinetyDimensions.tight)) {
+            CapsText(title, style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.semantics { heading() })
             if (!detail.isNullOrBlank()) {
                 if (detailAction == null) {

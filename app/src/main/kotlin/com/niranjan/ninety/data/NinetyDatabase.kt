@@ -25,8 +25,7 @@ data class StoredOverview(
     val loggingStartDay: Long,
     val conducted: Long,
     val present: Long,
-    val approvedDl: Long,
-    val pendingDl: Long,
+    val dutyLeave: Long,
     val balanceRevision: Long,
 )
 
@@ -49,8 +48,6 @@ data class SessionRow(
     val dayKind: String,
     val holiday: Boolean,
     val outcomeKind: String?,
-    val outcomeDlStatus: String?,
-    val outcomeDlEventId: String?,
     val outcomeRevision: Long?,
 )
 
@@ -64,20 +61,6 @@ data class DaySummaryRow(
     val recorded: Int,
     val sessionCount: Int,
 )
-
-data class DlEventRow(
-    val id: String,
-    val semesterId: String,
-    val title: String?,
-    val createdAt: Long,
-    val periods: Int,
-    val pending: Int,
-    val approved: Int,
-    val rejected: Int,
-    val dates: Int,
-)
-
-data class DlStatusCount(val dlStatus: String?, val total: Int)
 
 @Dao
 interface SetupDao {
@@ -110,23 +93,22 @@ interface SetupDao {
     @Query("SELECT * FROM course WHERE id = :id") suspend fun course(id: String): CourseEntity?
     @Query("SELECT * FROM course WHERE semesterId = :semesterId ORDER BY name COLLATE NOCASE, id") fun observeCourses(semesterId: String): Flow<List<CourseEntity>>
     @Query("SELECT * FROM course WHERE semesterId = :semesterId ORDER BY name COLLATE NOCASE, id") suspend fun courses(semesterId: String): List<CourseEntity>
-    @Query("SELECT * FROM course WHERE semesterId = :semesterId AND retired = 0 ORDER BY name COLLATE NOCASE, id") suspend fun activeCourses(semesterId: String): List<CourseEntity>
     @Query("UPDATE course SET name = :name, type = :type, colorArgb = :colorArgb WHERE id = :id")
     suspend fun updateCourse(id: String, name: String, type: String, colorArgb: Long?): Int
-    @Query("UPDATE course SET retired = 1 WHERE id = :id") suspend fun retireCourse(id: String): Int
+    @Query("UPDATE course SET retired = :retired WHERE id = :id") suspend fun setCourseRetired(id: String, retired: Boolean): Int
     @Query("SELECT * FROM opening_balance WHERE courseId = :courseId") suspend fun balance(courseId: String): OpeningBalanceEntity?
     @Query("SELECT * FROM opening_balance") suspend fun balances(): List<OpeningBalanceEntity>
     @Query("SELECT b.* FROM opening_balance b JOIN course c ON c.id = b.courseId WHERE c.semesterId = :semesterId")
     fun observeBalances(semesterId: String): Flow<List<OpeningBalanceEntity>>
-    @Query("UPDATE opening_balance SET loggingStartDay = :loggingStartDay, conducted = :conducted, present = :present, approvedDl = :approvedDl, pendingDl = :pendingDl, revision = revision + 1 WHERE courseId = :courseId")
-    suspend fun updateBalance(courseId: String, loggingStartDay: Long, conducted: Long, present: Long, approvedDl: Long, pendingDl: Long): Int
-    @Query("UPDATE opening_balance SET loggingStartDay = :loggingStartDay, conducted = :conducted, present = :present, approvedDl = :approvedDl, pendingDl = :pendingDl, revision = :revision WHERE courseId = :courseId")
-    suspend fun restoreBalance(courseId: String, loggingStartDay: Long, conducted: Long, present: Long, approvedDl: Long, pendingDl: Long, revision: Long): Int
+    @Query("UPDATE opening_balance SET loggingStartDay = :loggingStartDay, conducted = :conducted, present = :present, dutyLeave = :dutyLeave, revision = revision + 1 WHERE courseId = :courseId")
+    suspend fun updateBalance(courseId: String, loggingStartDay: Long, conducted: Long, present: Long, dutyLeave: Long): Int
+    @Query("UPDATE opening_balance SET loggingStartDay = :loggingStartDay, conducted = :conducted, present = :present, dutyLeave = :dutyLeave, revision = :revision WHERE courseId = :courseId")
+    suspend fun restoreBalance(courseId: String, loggingStartDay: Long, conducted: Long, present: Long, dutyLeave: Long, revision: Long): Int
     @Transaction
     @Query("""
         SELECT s.id AS semesterId, s.name AS semesterName, s.startDay, s.collegeZone, s.archived,
                c.id AS courseId, c.name AS courseName, c.type AS courseType,
-               b.loggingStartDay, b.conducted, b.present, b.approvedDl, b.pendingDl,
+               b.loggingStartDay, b.conducted, b.present, b.dutyLeave,
                b.revision AS balanceRevision
         FROM app_settings a
         JOIN semester s ON s.id = COALESCE(a.activeSemesterId, (SELECT id FROM semester ORDER BY rowid DESC LIMIT 1))
@@ -155,6 +137,8 @@ interface ScheduleDao {
     @Query("SELECT * FROM template_slot WHERE versionId = :versionId") suspend fun slots(versionId: String): List<TemplateSlotEntity>
     @Query("SELECT s.id AS versionId, s.effectiveDay AS effectiveDay, t.weekday AS weekday, t.slot AS slot, t.courseId AS courseId FROM schedule_version s LEFT JOIN template_slot t ON t.versionId = s.id WHERE s.semesterId = :semesterId ORDER BY s.effectiveDay")
     fun observeTemplates(semesterId: String): Flow<List<TemplateRow>>
+    @Query("SELECT DISTINCT versionId FROM template_slot WHERE courseId = :courseId")
+    suspend fun versionsForCourse(courseId: String): List<String>
     @Query("SELECT * FROM schedule_version WHERE id = :id") suspend fun version(id: String): ScheduleVersionEntity?
 }
 
@@ -208,79 +192,47 @@ interface JournalDao {
         start: Int, end: Int, cancelled: Boolean, pinned: Boolean, suppressed: Boolean, revision: Long): Int
     @Query("DELETE FROM session WHERE id = :id") suspend fun deleteSession(id: String): Int
     @Query("""SELECT s.*, d.day, d.kind AS dayKind, d.holiday,
-            o.kind AS outcomeKind, o.dlStatus AS outcomeDlStatus, o.dlEventId AS outcomeDlEventId, o.revision AS outcomeRevision
+            o.kind AS outcomeKind, o.revision AS outcomeRevision
         FROM session s JOIN day_instance d ON d.id = s.dayId
         LEFT JOIN attendance_outcome o ON o.sessionId = s.id
         WHERE s.dayId = :dayId ORDER BY s.slot IS NULL, s.slot, s.startMinute""")
     fun observeSessionsForDay(dayId: String): Flow<List<SessionRow>>
     @Query("""SELECT s.*, d.day, d.kind AS dayKind, d.holiday,
-            o.kind AS outcomeKind, o.dlStatus AS outcomeDlStatus, o.dlEventId AS outcomeDlEventId, o.revision AS outcomeRevision
+            o.kind AS outcomeKind, o.revision AS outcomeRevision
         FROM session s JOIN day_instance d ON d.id = s.dayId
         LEFT JOIN attendance_outcome o ON o.sessionId = s.id
         WHERE s.semesterId = :semesterId ORDER BY d.day, s.slot""")
     fun observeSessionRows(semesterId: String): Flow<List<SessionRow>>
     @Query("""SELECT s.*, d.day, d.kind AS dayKind, d.holiday,
-            o.kind AS outcomeKind, o.dlStatus AS outcomeDlStatus, o.dlEventId AS outcomeDlEventId, o.revision AS outcomeRevision
+            o.kind AS outcomeKind, o.revision AS outcomeRevision
         FROM session s JOIN day_instance d ON d.id = s.dayId
         LEFT JOIN attendance_outcome o ON o.sessionId = s.id
         WHERE s.semesterId = :semesterId AND s.courseId = :courseId""")
     suspend fun sessionRowsForCourse(semesterId: String, courseId: String): List<SessionRow>
     @Query("""SELECT s.*, d.day, d.kind AS dayKind, d.holiday,
-            o.kind AS outcomeKind, o.dlStatus AS outcomeDlStatus, o.dlEventId AS outcomeDlEventId, o.revision AS outcomeRevision
+            o.kind AS outcomeKind, o.revision AS outcomeRevision
         FROM session s JOIN day_instance d ON d.id = s.dayId
         LEFT JOIN attendance_outcome o ON o.sessionId = s.id
         WHERE s.dayId IN (SELECT id FROM day_instance WHERE semesterId = :semesterId AND day BETWEEN :from AND :to)""")
     suspend fun sessionRowsInRange(semesterId: String, from: Long, to: Long): List<SessionRow>
-    @Query("""SELECT s.*, d.day, d.kind AS dayKind, d.holiday,
-            o.kind AS outcomeKind, o.dlStatus AS outcomeDlStatus, o.dlEventId AS outcomeDlEventId, o.revision AS outcomeRevision
-        FROM session s JOIN day_instance d ON d.id = s.dayId
-        LEFT JOIN attendance_outcome o ON o.sessionId = s.id
-        WHERE o.dlEventId = :eventId ORDER BY d.day, s.slot""")
-    fun observeSessionsForEvent(eventId: String): Flow<List<SessionRow>>
-
     // Outcomes
     @Insert suspend fun insertOutcome(value: AttendanceOutcomeEntity)
     @Query("SELECT * FROM attendance_outcome WHERE sessionId = :sessionId") suspend fun outcome(sessionId: String): AttendanceOutcomeEntity?
-    @Query("UPDATE attendance_outcome SET kind = :kind, dlStatus = :dlStatus, dlEventId = :dlEventId, revision = revision + 1 WHERE sessionId = :sessionId")
-    suspend fun updateOutcome(sessionId: String, kind: String, dlStatus: String?, dlEventId: String?): Int
-    @Query("UPDATE attendance_outcome SET kind = :kind, dlStatus = :dlStatus, dlEventId = :dlEventId, revision = :revision WHERE sessionId = :sessionId")
-    suspend fun restoreOutcome(sessionId: String, kind: String, dlStatus: String?, dlEventId: String?, revision: Long): Int
+    @Query("UPDATE attendance_outcome SET kind = :kind, revision = revision + 1 WHERE sessionId = :sessionId")
+    suspend fun updateOutcome(sessionId: String, kind: String): Int
+    @Query("UPDATE attendance_outcome SET kind = :kind, revision = :revision WHERE sessionId = :sessionId")
+    suspend fun restoreOutcome(sessionId: String, kind: String, revision: Long): Int
     @Query("DELETE FROM attendance_outcome WHERE sessionId = :sessionId") suspend fun deleteOutcome(sessionId: String): Int
-    @Query("SELECT * FROM attendance_outcome WHERE dlEventId = :eventId") suspend fun outcomesForEvent(eventId: String): List<AttendanceOutcomeEntity>
-    @Query("UPDATE attendance_outcome SET dlStatus = :status, revision = revision + 1 WHERE sessionId = :sessionId AND kind = 'DL' AND dlEventId = :eventId")
-    suspend fun setOutcomeDlStatus(sessionId: String, eventId: String, status: String): Int
-
-    // Duty-leave events
-    @Insert suspend fun insertEvent(value: DlEventEntity)
-    @Query("SELECT * FROM dl_event WHERE id = :id") suspend fun event(id: String): DlEventEntity?
-    @Query("UPDATE dl_event SET title = :title WHERE id = :id") suspend fun renameEvent(id: String, title: String?): Int
-    @Query("DELETE FROM dl_event WHERE id = :id") suspend fun deleteEvent(id: String): Int
-    @Query("""SELECT e.*, COUNT(o.sessionId) AS periods,
-        SUM(CASE WHEN o.dlStatus = 'PENDING' THEN 1 ELSE 0 END) AS pending,
-        SUM(CASE WHEN o.dlStatus = 'APPROVED' THEN 1 ELSE 0 END) AS approved,
-        SUM(CASE WHEN o.dlStatus = 'REJECTED' THEN 1 ELSE 0 END) AS rejected,
-        COUNT(DISTINCT d.day) AS dates
-        FROM dl_event e
-        LEFT JOIN attendance_outcome o ON o.dlEventId = e.id
-        LEFT JOIN session s ON s.id = o.sessionId
-        LEFT JOIN day_instance d ON d.id = s.dayId
-        WHERE e.semesterId = :semesterId GROUP BY e.id ORDER BY e.createdAt DESC""")
-    fun observeEvents(semesterId: String): Flow<List<DlEventRow>>
-    @Query("""SELECT COUNT(DISTINCT d.day) FROM attendance_outcome o
-        JOIN session s ON s.id = o.sessionId JOIN day_instance d ON d.id = s.dayId
-        WHERE s.semesterId = :semesterId AND o.kind = 'DL'""")
-    fun observeDlDates(semesterId: String): Flow<Int>
-    @Query("""SELECT o.dlStatus AS dlStatus, COUNT(*) AS total FROM attendance_outcome o
-        JOIN session s ON s.id = o.sessionId WHERE s.semesterId = :semesterId AND o.kind = 'DL'
-        GROUP BY o.dlStatus""")
-    fun observeDlStatusCounts(semesterId: String): Flow<List<DlStatusCount>>
-
     // Change batches for guarded undo and history inspection
     @Insert suspend fun insertBatch(value: ChangeBatchEntity)
     @Query("SELECT * FROM change_batch WHERE id = :id") suspend fun batch(id: String): ChangeBatchEntity?
     @Query("SELECT * FROM change_batch WHERE undoneAt IS NULL ORDER BY createdAt DESC, rowid DESC LIMIT 1")
     fun observeUndoable(): Flow<ChangeBatchEntity?>
+    @Query("SELECT * FROM change_batch WHERE undoneAt IS NULL ORDER BY rowid DESC")
+    suspend fun pendingBatches(): List<ChangeBatchEntity>
     @Query("UPDATE change_batch SET undoneAt = :at WHERE id = :id") suspend fun markUndone(id: String, at: Long): Int
+    @Query("DELETE FROM change_batch WHERE kind = :kind AND undoneAt IS NULL")
+    suspend fun discardUndoForKind(kind: String): Int
     @Query("DELETE FROM change_batch WHERE id NOT IN (SELECT id FROM change_batch ORDER BY createdAt DESC, rowid DESC LIMIT :keep)")
     suspend fun pruneBatches(keep: Int): Int
 
@@ -288,17 +240,16 @@ interface JournalDao {
     @Query("SELECT * FROM day_instance WHERE semesterId = :semesterId") suspend fun allDays(semesterId: String): List<DayInstanceEntity>
     @Query("SELECT * FROM session WHERE semesterId = :semesterId") suspend fun allSessions(semesterId: String): List<SessionEntity>
     @Query("SELECT * FROM attendance_outcome") suspend fun allOutcomes(): List<AttendanceOutcomeEntity>
-    @Query("SELECT * FROM dl_event WHERE semesterId = :semesterId") suspend fun allEvents(semesterId: String): List<DlEventEntity>
-    @Query("SELECT * FROM change_batch") suspend fun allBatches(): List<ChangeBatchEntity>
+    @Query("SELECT * FROM change_batch ORDER BY rowid") suspend fun allBatches(): List<ChangeBatchEntity>
 }
 
 @Database(
     entities = [
         SemesterEntity::class, CourseEntity::class, OpeningBalanceEntity::class, AppSettingsEntity::class,
         ScheduleVersionEntity::class, TemplateSlotEntity::class, DayInstanceEntity::class,
-        SessionEntity::class, AttendanceOutcomeEntity::class, DlEventEntity::class, ChangeBatchEntity::class,
+        SessionEntity::class, AttendanceOutcomeEntity::class, ChangeBatchEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class NinetyDatabase : RoomDatabase() {
@@ -310,7 +261,7 @@ abstract class NinetyDatabase : RoomDatabase() {
         fun create(context: Context, name: String = "ninety.db"): NinetyDatabase =
             Room.databaseBuilder(context.applicationContext, NinetyDatabase::class.java, name)
                 .addCallback(integrityCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
 
         // Rebuild all related tables in dependency order; works on API 26 SQLite,
@@ -406,6 +357,32 @@ abstract class NinetyDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE attendance_outcome_new (
+                    sessionId TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, revision INTEGER NOT NULL,
+                    FOREIGN KEY(sessionId) REFERENCES session(id) ON UPDATE NO ACTION ON DELETE RESTRICT)""")
+                db.execSQL("""INSERT INTO attendance_outcome_new (sessionId, kind, revision)
+                    SELECT sessionId, kind, revision FROM attendance_outcome WHERE kind IN ('PRESENT', 'ABSENT')""")
+                db.execSQL("DROP TABLE attendance_outcome")
+                db.execSQL("ALTER TABLE attendance_outcome_new RENAME TO attendance_outcome")
+                db.execSQL("DROP TABLE dl_event")
+
+                db.execSQL("""CREATE TABLE opening_balance_new (
+                    courseId TEXT NOT NULL PRIMARY KEY, loggingStartDay INTEGER NOT NULL,
+                    conducted INTEGER NOT NULL, present INTEGER NOT NULL, dutyLeave INTEGER NOT NULL,
+                    revision INTEGER NOT NULL,
+                    FOREIGN KEY(courseId) REFERENCES course(id) ON UPDATE NO ACTION ON DELETE RESTRICT)""")
+                db.execSQL("""INSERT INTO opening_balance_new (courseId, loggingStartDay, conducted, present, dutyLeave, revision)
+                    SELECT courseId, loggingStartDay, conducted, present, 0, revision FROM opening_balance""")
+                db.execSQL("DROP TABLE opening_balance")
+                db.execSQL("ALTER TABLE opening_balance_new RENAME TO opening_balance")
+
+                // Old undo entries can contain duty leave event links and approval states.
+                db.execSQL("DELETE FROM change_batch")
+            }
+        }
+
         /** Mirror cross-field invariants in SQLite, including direct DAO writes. */
         val integrityCallback = object : Callback() {
             override fun onOpen(db: SupportSQLiteDatabase) {
@@ -429,8 +406,7 @@ abstract class NinetyDatabase : RoomDatabase() {
                     guard("opening_balance", "counts", """
                         NEW.conducted < 0 OR NEW.conducted > $MAX_PERIOD_COUNT OR
                         NEW.present < 0 OR NEW.present > NEW.conducted OR
-                        NEW.approvedDl < 0 OR NEW.approvedDl > NEW.conducted - NEW.present OR
-                        NEW.pendingDl < 0 OR NEW.pendingDl > NEW.conducted - NEW.present - NEW.approvedDl OR
+                        NEW.dutyLeave < 0 OR NEW.dutyLeave > NEW.conducted - NEW.present OR
                         NEW.revision < 0 OR NOT EXISTS (
                           SELECT 1 FROM course c JOIN semester s ON s.id = c.semesterId
                           WHERE c.id = NEW.courseId AND NEW.loggingStartDay >= s.startDay
@@ -468,13 +444,8 @@ abstract class NinetyDatabase : RoomDatabase() {
                         NOT EXISTS (SELECT 1 FROM course c WHERE c.id = NEW.courseId AND c.semesterId = NEW.semesterId)
                     """.trimIndent())
                     guard("attendance_outcome", "fields", """
-                        NEW.kind NOT IN ('PRESENT', 'ABSENT', 'DL') OR
-                        (NEW.kind = 'DL') != (NEW.dlStatus IS NOT NULL AND NEW.dlEventId IS NOT NULL) OR
-                        (NEW.dlStatus IS NOT NULL AND NEW.dlStatus NOT IN ('PENDING', 'APPROVED', 'REJECTED')) OR
+                        NEW.kind NOT IN ('PRESENT', 'ABSENT', 'DUTY_LEAVE') OR
                         NEW.revision < 0
-                    """.trimIndent())
-                    guard("dl_event", "fields", """
-                        NOT EXISTS (SELECT 1 FROM semester s WHERE s.id = NEW.semesterId)
                     """.trimIndent())
                     guard("change_batch", "fields", "length(trim(NEW.kind)) = 0 OR length(trim(NEW.payload)) = 0")
                 }

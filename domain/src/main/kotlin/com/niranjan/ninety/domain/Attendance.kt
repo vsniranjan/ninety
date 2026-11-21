@@ -37,20 +37,16 @@ data class OpeningBalance(
     val loggingStartDate: LocalDate,
     val conducted: Long = 0,
     val present: Long = 0,
-    val approvedDl: Long = 0,
-    val pendingDl: Long = 0,
+    val dutyLeave: Long = 0,
 ) {
     init {
         require(conducted in 0..MAX_PERIOD_COUNT) { "Conducted count is outside the supported range." }
         require(present in 0..conducted) { "Present count cannot exceed conducted periods." }
-        require(approvedDl in 0..(conducted - present)) { "Approved DL exceeds remaining conducted periods." }
-        require(pendingDl in 0..(conducted - present - approvedDl)) {
-            "Present + approved DL + pending DL cannot exceed conducted periods."
-        }
+        require(dutyLeave in 0..(conducted - present)) { "Present + duty leave cannot exceed conducted periods." }
     }
 }
 
-enum class AttendanceOutcome { UNRECORDED, PRESENT, ABSENT, DL_PENDING, DL_APPROVED, DL_REJECTED }
+enum class AttendanceOutcome { UNRECORDED, PRESENT, ABSENT, DUTY_LEAVE }
 
 /** One academic period. Clock duration is intentionally absent from the calculation input. */
 data class PeriodFact(
@@ -66,15 +62,11 @@ data class PeriodFact(
 data class AttendanceSummary(
     val conducted: Long,
     val physicallyPresent: Long,
-    val approvedDl: Long,
-    val pendingDl: Long,
-    val datedRejectedDl: Long,
+    val dutyLeave: Long,
     val missingPastPeriods: Long,
     val incompleteDates: Set<LocalDate>,
 ) {
-    val credited: Long get() = physicallyPresent + approvedDl + pendingDl
-    val confirmedCredited: Long get() = physicallyPresent + approvedDl
-    val isProvisional: Boolean get() = pendingDl > 0
+    val credited: Long get() = physicallyPresent + dutyLeave
     val hasIncompleteData: Boolean get() = missingPastPeriods > 0
     val meetsMinimum: Boolean? get() = if (conducted == 0L) null else 10 * credited >= 9 * conducted
     val safeSkips: Long? get() = if (conducted == 0L) null else maxOf(0, 10 * credited - 9 * conducted) / 9
@@ -97,9 +89,7 @@ object AttendanceEngine {
         val includeOpening = !asOfDate.isBefore(opening.loggingStartDate)
         var n = if (includeOpening) opening.conducted else 0
         var p = if (includeOpening) opening.present else 0
-        var da = if (includeOpening) opening.approvedDl else 0
-        var dp = if (includeOpening) opening.pendingDl else 0
-        var rejected = 0L
+        var leave = if (includeOpening) opening.dutyLeave else 0
         var missing = 0L
         val incompleteDates = sortedSetOf<LocalDate>()
         periods.forEach { period ->
@@ -117,12 +107,10 @@ object AttendanceEngine {
             n++
             when (period.outcome) {
                 AttendanceOutcome.PRESENT -> p++
-                AttendanceOutcome.DL_APPROVED -> da++
-                AttendanceOutcome.DL_PENDING -> dp++
-                AttendanceOutcome.DL_REJECTED -> rejected++
+                AttendanceOutcome.DUTY_LEAVE -> leave++
                 AttendanceOutcome.ABSENT, AttendanceOutcome.UNRECORDED -> Unit
             }
         }
-        return AttendanceSummary(n, p, da, dp, rejected, missing, incompleteDates.toSet())
+        return AttendanceSummary(n, p, leave, missing, incompleteDates.toSet())
     }
 }

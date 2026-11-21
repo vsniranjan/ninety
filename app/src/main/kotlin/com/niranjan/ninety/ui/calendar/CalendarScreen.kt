@@ -15,19 +15,19 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,7 +42,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -51,8 +50,13 @@ import com.niranjan.ninety.R
 import com.niranjan.ninety.data.DaySummary
 import com.niranjan.ninety.domain.DayKind
 import com.niranjan.ninety.ui.collegeWeekdays
-import com.niranjan.ninety.ui.designsystem.NinetyCard
+import com.niranjan.ninety.ui.day.CalendarAttendanceSheet
+import com.niranjan.ninety.ui.designsystem.ActionRow
 import com.niranjan.ninety.ui.designsystem.ActionIcon
+import com.niranjan.ninety.ui.designsystem.BackToTodayButton
+import com.niranjan.ninety.ui.designsystem.CapsText
+import com.niranjan.ninety.ui.designsystem.NinetyCard
+import com.niranjan.ninety.ui.designsystem.NinetyDimensions
 import com.niranjan.ninety.ui.designsystem.SectionLabel
 import com.niranjan.ninety.ui.long
 import com.niranjan.ninety.ui.ninetyViewModel
@@ -73,30 +77,31 @@ fun CalendarScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate,
     val days by model.summaries.collectAsStateWithLifecycle()
     val incomplete by model.incomplete.collectAsStateWithLifecycle()
     val byDate = days.associateBy { it.date }
+    var selectedEpochDay by rememberSaveable(semesterId) { mutableStateOf<Long?>(null) }
+    val openAttendance: (LocalDate) -> Unit = { selectedEpochDay = it.toEpochDay() }
 
     LazyColumn(Modifier.fillMaxSize().testTag("calendar_list"),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 ActionIcon(R.drawable.ic_back, stringResource(R.string.previous_month), { model.moveMonth(-1) },
                     modifier = Modifier.testTag("month_prev"), enabled = month > YearMonth.from(semesterStart))
-                Text(monthLabel(month), style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                CapsText(monthLabel(month), style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center)
                 ActionIcon(R.drawable.ic_forward, stringResource(R.string.next_month), { model.moveMonth(1) },
                     modifier = Modifier.testTag("month_next"))
             }
             if (month != YearMonth.from(today) && today >= semesterStart) {
-                TextButton(onClick = { model.showToday(today) },
-                    modifier = Modifier.padding(horizontal = 24.dp).heightIn(min = 48.dp).testTag("calendar_today")) {
-                    Text(stringResource(R.string.today))
+                Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
+                    BackToTodayButton(onClick = { model.showToday(today) }, modifier = Modifier.testTag("calendar_today"))
                 }
             }
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MonthGrid(month, byDate, today, semesterStart, onOpenDay)
+                MonthGrid(month, byDate, today, semesterStart, openAttendance)
                 CalendarLegend()
             }
         }
@@ -108,18 +113,23 @@ fun CalendarScreen(semesterId: UUID, semesterStart: LocalDate, today: LocalDate,
                     Modifier.padding(horizontal = 24.dp))
             }
             items(incomplete, key = { it.date.toEpochDay() }) { day ->
-                NinetyCard(Modifier.fillMaxWidth().padding(horizontal = 24.dp).heightIn(min = 48.dp),
-                    onClick = { onOpenDay(day.date) }) {
-                    Text(
-                        stringResource(R.string.incomplete_day_periods, day.date.weekdayAndDate(),
-                            day.total - day.recorded, day.total),
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
+                val unmarked = day.total - day.recorded
+                ActionRow(R.drawable.ic_calendar, day.date.weekdayAndDate(), { openAttendance(day.date) },
+                    modifier = Modifier.padding(horizontal = 24.dp), showChevron = true,
+                    supportingText = pluralStringResource(R.plurals.course_unmarked_periods, unmarked, unmarked))
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+
+    selectedEpochDay?.let { epochDay ->
+        val date = LocalDate.ofEpochDay(epochDay)
+        CalendarAttendanceSheet(semesterId, date,
+            onDismiss = { selectedEpochDay = null },
+            onOpenFullDay = {
+                selectedEpochDay = null
+                onOpenDay(date)
+            })
     }
 }
 
@@ -250,7 +260,7 @@ private fun DayCell(date: LocalDate, summary: DaySummary?, today: LocalDate, ena
         stringResource(R.string.calendar_status_with_timetable, status)
     } else status
     Box(
-        Modifier.size(48.dp).clip(CircleShape).background(background)
+        Modifier.size(NinetyDimensions.touchTarget).clip(NinetyDimensions.pill).background(background)
             .clickable(enabled = enabled, role = Role.Button) { onOpenDay(date) }
             .testTag("day_cell_$date").semantics {
                 contentDescription = date.long()

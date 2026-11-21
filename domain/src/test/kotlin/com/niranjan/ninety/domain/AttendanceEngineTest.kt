@@ -10,8 +10,8 @@ class AttendanceEngineTest {
     private val course = UUID.randomUUID()
     private val today = LocalDate.of(2026, 11, 11)
     private val cutoff = today.minusDays(10)
-    private fun balance(n: Long = 0, p: Long = 0, da: Long = 0, dp: Long = 0) =
-        OpeningBalance(course, cutoff, n, p, da, dp)
+    private fun balance(n: Long = 0, p: Long = 0, leave: Long = 0) =
+        OpeningBalance(course, cutoff, n, p, leave)
     private fun period(
         outcome: AttendanceOutcome,
         date: LocalDate = today,
@@ -61,22 +61,25 @@ class AttendanceEngineTest {
         assertEquals(2L, result.credited)
     }
 
-    @Test fun pendingDrivesPrimarySafeSkipsAndApprovalRejectionRecalculate() {
-        val fact = period(AttendanceOutcome.DL_PENDING)
-        val pending = calculate(balance(39, 37), fact)
-        assertEquals(38L, pending.credited)
-        assertEquals(37L, pending.confirmedCredited)
-        assertEquals(2L, pending.safeSkips)
-        assertTrue(pending.isProvisional)
-        val approved = calculate(balance(39, 37), fact.copy(outcome = AttendanceOutcome.DL_APPROVED))
-        assertEquals(pending.credited, approved.credited)
-        assertEquals(38L, approved.confirmedCredited)
-        assertFalse(approved.isProvisional)
-        val rejected = calculate(balance(39, 37), fact.copy(outcome = AttendanceOutcome.DL_REJECTED))
-        assertEquals(40L, rejected.conducted)
-        assertEquals(37L, rejected.credited)
-        assertEquals(1L, rejected.datedRejectedDl)
-        assertEquals(1L, rejected.safeSkips)
+    @Test fun dutyLeaveEarnsImmediateCreditAndChangingTheMarkRecalculates() {
+        val fact = period(AttendanceOutcome.DUTY_LEAVE)
+        val leave = calculate(balance(39, 37), fact)
+        assertEquals(40L, leave.conducted)
+        assertEquals(37L, leave.physicallyPresent)
+        assertEquals(1L, leave.dutyLeave)
+        assertEquals(38L, leave.credited)
+        assertEquals(2L, leave.safeSkips)
+
+        val absent = calculate(balance(39, 37), fact.copy(outcome = AttendanceOutcome.ABSENT))
+        assertEquals(40L, absent.conducted)
+        assertEquals(37L, absent.credited)
+        assertEquals(1L, absent.safeSkips)
+        assertEquals(0L, absent.dutyLeave)
+
+        val boundary = balance(9, 8)
+        assertEquals(0L, calculate(boundary, fact).recovery)
+        assertEquals(10L, calculate(boundary, fact.copy(outcome = AttendanceOutcome.ABSENT)).recovery)
+        assertEquals(9L, calculate(boundary, fact.copy(outcome = AttendanceOutcome.UNRECORDED)).conducted)
     }
 
     @Test fun excludedPeriodsNeverEnterEitherTotalOrMissingWarnings() {
@@ -84,7 +87,7 @@ class AttendanceEngineTest {
             period(AttendanceOutcome.PRESENT, today.plusDays(1)),
             period(AttendanceOutcome.PRESENT, cutoff.minusDays(1)),
             period(AttendanceOutcome.PRESENT, cancelled = true),
-            period(AttendanceOutcome.DL_PENDING, holiday = true),
+            period(AttendanceOutcome.DUTY_LEAVE, holiday = true),
             period(AttendanceOutcome.PRESENT, counted = false),
             period(AttendanceOutcome.UNRECORDED, today.minusDays(1), holiday = true),
             period(AttendanceOutcome.UNRECORDED, today.minusDays(1), counted = false),
@@ -104,15 +107,15 @@ class AttendanceEngineTest {
     }
 
     @Test fun openingAndNewRecordsCombineExactlyOnce() {
-        val result = calculate(balance(40, 35, 2, 1), period(AttendanceOutcome.PRESENT), period(AttendanceOutcome.ABSENT))
+        val result = calculate(balance(40, 35, 3), period(AttendanceOutcome.PRESENT), period(AttendanceOutcome.ABSENT))
         assertEquals(42L, result.conducted)
         assertEquals(36L, result.physicallyPresent)
         assertEquals(39L, result.credited)
-        assertEquals(38L, result.confirmedCredited)
+        assertEquals(3L, result.dutyLeave)
     }
 
     @Test fun holidayAndCancellationRestorationRetainPriorFacts() {
-        val original = period(AttendanceOutcome.DL_PENDING)
+        val original = period(AttendanceOutcome.DUTY_LEAVE)
         assertEquals(0L, calculate(balance(), original.copy(holiday = true)).conducted)
         assertEquals(0L, calculate(balance(), original.copy(cancelled = true)).conducted)
         assertEquals(1L, calculate(balance(), original).credited)
@@ -124,10 +127,9 @@ class AttendanceEngineTest {
 
     @Test fun invalidBalancesAndArithmeticOverflowAreRejected() {
         assertThrows(IllegalArgumentException::class.java) { balance(-1) }
-        assertThrows(IllegalArgumentException::class.java) { balance(10, 8, 2, 1) }
+        assertThrows(IllegalArgumentException::class.java) { balance(10, 8, 3) }
         assertThrows(IllegalArgumentException::class.java) { balance(10, -1) }
         assertThrows(IllegalArgumentException::class.java) { balance(10, 0, -1) }
-        assertThrows(IllegalArgumentException::class.java) { balance(10, 0, 0, -1) }
         assertThrows(IllegalArgumentException::class.java) { balance(Long.MAX_VALUE) }
         val maximum = balance(MAX_PERIOD_COUNT, MAX_PERIOD_COUNT)
         assertEquals(MAX_PERIOD_COUNT / 9, calculate(maximum).safeSkips)
