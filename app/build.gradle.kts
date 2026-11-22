@@ -6,6 +6,9 @@ plugins {
     alias(libs.plugins.room)
 }
 
+val signReleaseWithDebugKey =
+    providers.gradleProperty("ninety.signReleaseWithDebugKey").orNull == "true"
+
 android {
     namespace = "com.niranjan.ninety"
     compileSdk = 37
@@ -23,26 +26,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    signingConfigs {
-        // Local release installs reuse the standard debug key; this app is
-        // sideloaded, not Play-distributed, so no release keystore is needed.
-        create("release") {
-            val debugKey = File(System.getProperty("user.home"), ".android/debug.keystore")
-            if (debugKey.exists()) {
-                storeFile = debugKey
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
-            }
-        }
-    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfigs.findByName("release")?.takeIf { it.storeFile != null }?.let {
-                signingConfig = it
+            if (signReleaseWithDebugKey) {
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }
@@ -51,10 +41,6 @@ android {
         unitTests.all {
             it.systemProperty("ninety.screenshots", layout.buildDirectory.dir("qa").get().asFile.absolutePath)
         }
-    }
-    sourceSets {
-        getByName("test").kotlin.directories.add("src/sharedTest/kotlin")
-        getByName("androidTest").kotlin.directories.add("src/sharedTest/kotlin")
     }
     lint { warningsAsErrors = true }
 }

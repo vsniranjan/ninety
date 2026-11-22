@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
  * The run is self-adapting: if a semester already exists (test re-run), a new one
  * is created through Settings → "New semester" instead. Nothing is uninstalled
  * or cleared; fixture data created here stays on the device and is clearly named
- * "Device Test <suffix>" (spec §10.1.1 — never resets app storage).
+ * "Device Test <suffix>" without resetting app storage.
  */
 @RunWith(AndroidJUnit4::class)
 class AppJourneyDeviceTest {

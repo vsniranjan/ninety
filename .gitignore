@@ -1,6 +1,7 @@
 .gradle/
 .kotlin/
 **/build/
+__pycache__/
 local.properties
 .idea/
 *.iml
@@ -15,8 +16,15 @@ signing.properties
 .agents/
 .codex/
 .aws/
+.devin/
+.impeccable/
 captures/
 *.hprof
 *.apk
 *.aab
 *.apks
+*.db
+*.db-shm
+*.db-wal
+*.sqlite*
+ninety-backup-*.json

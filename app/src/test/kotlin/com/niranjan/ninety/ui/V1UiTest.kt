@@ -535,6 +535,7 @@ class V1UiTest {
         compose.waitUntil(10_000) {
             runBlocking { repo.observeCourses(semesterId).first().any { it.id == labId.toString() && !it.retired } }
         }
+        compose.waitUntil(10_000) { exists("course_stop") }
         compose.onNodeWithTag("course_detail").performScrollToNode(hasTestTag("course_stop"))
         compose.onNodeWithTag("course_stop").assertIsDisplayed()
     }

@@ -5,7 +5,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * Institutional slot times from spec §2.2, in minutes since local midnight.
+ * Fixed timetable slot times, in minutes since local midnight.
  * Clock durations are scheduling/UX information only and never weight attendance.
  */
 object PeriodTimes {

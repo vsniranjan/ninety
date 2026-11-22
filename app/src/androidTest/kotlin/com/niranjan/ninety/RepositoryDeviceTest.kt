@@ -28,7 +28,7 @@ import org.junit.runner.RunWith
 /**
  * Behavioral verification of the repository against real Android SQLite on a
  * physical device. Fixtures use in-memory databases only — the installed app's
- * storage is never opened or modified (spec §10.1.1).
+ * storage is never opened or modified.
  *
  * The semester starts on the current week's Monday so all scheduled sessions are
  * materialized and recordable regardless of which weekday the suite runs on.
